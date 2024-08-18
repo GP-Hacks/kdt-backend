@@ -1,0 +1,5 @@
+env: "local"
+address: "localhost:8888"
+chat_address: "localhost:8889"
+timeout: 5s
+idle_timeout: 60s
