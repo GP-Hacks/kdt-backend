@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"context"
 	"github.com/GP-Hack/kdt2024-commons/api/proto"
 	"github.com/GP-Hack/kdt2024-commons/json"
 	"github.com/go-chi/chi/v5/middleware"
@@ -12,7 +11,16 @@ import (
 func NewSendMessageHandler(log *slog.Logger, chatClient proto.ChatServiceClient) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		const op = "handler.chat.send.New"
+		ctx := r.Context()
 		log = log.With(slog.String("op", op), slog.Any("request_id", middleware.GetReqID(r.Context())), slog.Any("ip", r.RemoteAddr))
+
+		select {
+		case <-ctx.Done():
+			log.Warn("Request cancelled by the client")
+			return
+		default:
+		}
+
 		user := r.Header.Get("Authorization")
 		if user == "" {
 			json.WriteError(w, http.StatusUnauthorized, "Authorization required")
@@ -42,7 +50,7 @@ func NewSendMessageHandler(log *slog.Logger, chatClient proto.ChatServiceClient)
 			return
 		}
 
-		resp, err := chatClient.SendMessage(context.Background(), &proto.SendMessageRequest{
+		resp, err := chatClient.SendMessage(ctx, &proto.SendMessageRequest{
 			Messages: messages,
 		})
 

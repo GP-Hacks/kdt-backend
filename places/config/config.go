@@ -4,23 +4,18 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"log"
 	"os"
-	"time"
 )
 
 type Config struct {
-	Env           string        `yaml:"env" env-required:"true"`
-	Address       string        `yaml:"address" env-required:"true"`
-	ChatAddress   string        `yaml:"chat_address" env-required:"true"`
-	PlacesAddress string        `yaml:"places_address" env-required:"true"`
-	Timeout       time.Duration `yaml:"timeout" env-required:"true"`
-	IdleTimeout   time.Duration `yaml:"idle_timeout" env-required:"true"`
+	Env     string `yaml:"env" env-required:"true"`
+	Address string `yaml:"address" env-required:"true"`
 }
 
 func MustLoad() *Config {
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
 		// TODO: move to env
-		configPath = "gateway/config/config.yaml"
+		configPath = "places/config/config.yaml"
 		//log.Fatal("CONFIG_PATH environment variable is not set")
 	}
 

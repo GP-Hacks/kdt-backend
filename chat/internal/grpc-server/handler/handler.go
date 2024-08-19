@@ -34,11 +34,20 @@ func NewGRPCHandler(server *grpc.Server, storage *storage.RedisStorage, logger *
 }
 
 func (h *GRPCHandler) SendMessage(ctx context.Context, req *proto.SendMessageRequest) (*proto.SendMessageResponse, error) {
-	h.logger.Info("Processing SendMessage")
+	h.logger.Debug("Processing SendMessage", slog.Any("proto request", req))
+
+	select {
+	case <-ctx.Done():
+		h.logger.Warn("Request was cancelled")
+		return nil, ctx.Err()
+	default:
+	}
 
 	botURL := "https://app.fastbots.ai/api/bots/clzydq0yf01hpr4beei5nl8xd/ask"
 	message := req.GetMessages()[0].GetContent()
 	redisKey := "chatbot:" + message
+
+	// TODO: move cache to proxy before gateway
 
 	cachedResponse, err := h.storage.Get(ctx, redisKey)
 	if err == nil {
@@ -89,5 +98,13 @@ func (h *GRPCHandler) SendMessage(ctx context.Context, req *proto.SendMessageReq
 
 	return &proto.SendMessageResponse{
 		Response: string(body),
+	}, nil
+}
+
+func (h *GRPCHandler) HealthCheck(ctx context.Context, req *proto.HealthCheckRequest) (*proto.HealthCheckResponse, error) {
+	h.logger.Debug("Processing HealthCheck")
+
+	return &proto.HealthCheckResponse{
+		IsHealthy: true,
 	}, nil
 }

@@ -4,4 +4,5 @@ use (
 	./chat
 	./commons
 	./gateway
+	./places
 )

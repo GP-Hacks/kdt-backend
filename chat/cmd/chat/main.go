@@ -26,9 +26,16 @@ func main() {
 		_ = l.Close()
 	}(l)
 
-	storage := storage.NewRedisStorage(cfg.RedisAddress, 1)
+	storage, err := storage.NewRedisStorage(cfg.RedisAddress, 1)
+	if err != nil {
+		log.Error("Error connecting redis", slog.String("address", cfg.RedisAddress), slog.String("error", err.Error()))
+		return
+	}
+	log.Info("Redis connected", slog.String("address", cfg.RedisAddress))
+
 	handler.NewGRPCHandler(grpcServer, storage, log)
 	if err := grpcServer.Serve(l); err != nil {
 		log.Error("Error serving gRPC server for ChatService", slog.String("address", cfg.Address), slog.String("error", err.Error()))
+		return
 	}
 }
