@@ -2,9 +2,11 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"time"
 )
 
 type PostgresStorage struct {
@@ -21,10 +23,12 @@ type Place struct {
 	Name        string
 	Tel         string
 	Website     string
+	Cost        int
+	Time        string
 }
 
 type Photo struct {
-	PlaceId int
+	PlaceID int
 	Url     string
 }
 
@@ -43,75 +47,93 @@ func (s *PostgresStorage) Close() {
 
 func (s *PostgresStorage) GetPlaces(ctx context.Context) ([]*Place, error) {
 	const op = "storage.postgresql.GetPlaces"
-	var places []*Place
-	rows, err := s.db.Query(ctx, "SELECT * FROM places")
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		place := &Place{}
-		err := rows.Scan(&place.ID, &place.Category, &place.Description, &place.Latitude, &place.Longitude, &place.Location, &place.Name, &place.Tel, &place.Website)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", op, err)
-		}
-		if place.Name != "" {
-			places = append(places, place)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-	return places, nil
+	query := "SELECT id, category, description, latitude, longitude, location, name, tel, website, cost, time FROM places"
+	return s.fetchPlaces(ctx, query)
 }
 
 func (s *PostgresStorage) GetPlacesByCategory(ctx context.Context, category string) ([]*Place, error) {
 	const op = "storage.postgresql.GetPlacesByCategory"
-	var places []*Place
-	rows, err := s.db.Query(ctx, "SELECT * FROM places where category = $1", category)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		place := &Place{}
-		err := rows.Scan(&place.ID, &place.Category, &place.Description, &place.Latitude, &place.Longitude, &place.Location, &place.Name, &place.Tel, &place.Website)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", op, err)
-		}
-		if place.Name != "" {
-			places = append(places, place)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-	if len(places) == 0 {
-		return nil, pgx.ErrNoRows
-	}
-	return places, nil
+	query := "SELECT id, category, description, latitude, longitude, location, name, tel, website, cost, time FROM places WHERE category = $1"
+	return s.fetchPlaces(ctx, query, category)
 }
 
-func (s *PostgresStorage) GetPhotosById(ctx context.Context, id int) ([]*Photo, error) {
+func (s *PostgresStorage) GetPlaceById(ctx context.Context, placeID int) (*Place, error) {
+	const op = "storage.postgresql.GetPlaceById"
+	query := "SELECT id, category, description, latitude, longitude, location, name, tel, website, cost, time FROM places WHERE id = $1"
+	place := &Place{}
+	err := s.db.QueryRow(ctx, query, placeID).Scan(
+		&place.ID, &place.Category, &place.Description, &place.Latitude, &place.Longitude,
+		&place.Location, &place.Name, &place.Tel, &place.Website, &place.Cost, &place.Time,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, pgx.ErrNoRows
+		}
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	return place, nil
+}
+
+func (s *PostgresStorage) GetPhotosById(ctx context.Context, placeID int) ([]*Photo, error) {
 	const op = "storage.postgresql.GetPhotosById"
-	var photos []*Photo
-	rows, err := s.db.Query(ctx, "SELECT * FROM photos WHERE place_id = $1", id)
+	query := "SELECT place_id, url FROM photos WHERE place_id = $1"
+
+	rows, err := s.db.Query(ctx, query, placeID)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	defer rows.Close()
+
+	var photos []*Photo
 	for rows.Next() {
 		photo := &Photo{}
-		err := rows.Scan(&photo.PlaceId, &photo.Url)
+		err := rows.Scan(&photo.PlaceID, &photo.Url)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
-		if photo.Url != "" {
-			photos = append(photos, photo)
-		}
+		photos = append(photos, photo)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	return photos, nil
+}
+
+func (s *PostgresStorage) SaveOrder(ctx context.Context, token string, placeID int, orderTime time.Time, cost int) error {
+	const op = "storage.postgresql.SaveOrder"
+	query := "INSERT INTO orders (user_token, place_id, order_time, cost) VALUES ($1, $2, $3, $4)"
+	_, err := s.db.Exec(ctx, query, token, placeID, orderTime, cost)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
+}
+
+func (s *PostgresStorage) fetchPlaces(ctx context.Context, query string, args ...interface{}) ([]*Place, error) {
+	const op = "storage.postgresql.fetchPlaces"
+	rows, err := s.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	var places []*Place
+	for rows.Next() {
+		place := &Place{}
+		err := rows.Scan(
+			&place.ID, &place.Category, &place.Description, &place.Latitude, &place.Longitude,
+			&place.Location, &place.Name, &place.Tel, &place.Website, &place.Cost, &place.Time,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		places = append(places, place)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	if len(places) == 0 && len(args) > 0 {
+		return nil, pgx.ErrNoRows
+	}
+	return places, nil
 }

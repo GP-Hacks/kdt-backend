@@ -1,5 +1,6 @@
 syntax = "proto3";
 
+import "google/protobuf/timestamp.proto";
 option go_package = "github.com/GP-Hacks/commons/api/proto";
 
 package api;
@@ -22,8 +23,7 @@ message SendMessageResponse {
   string response = 1;
 }
 
-message HealthCheckRequest {
-}
+message HealthCheckRequest {}
 
 message HealthCheckResponse {
   bool is_healthy = 1;
@@ -31,6 +31,7 @@ message HealthCheckResponse {
 
 service PlacesService {
   rpc GetPlaces(GetPlacesRequest) returns (GetPlacesResponse);
+  rpc BuyTicket(BuyTicketRequest) returns (BuyTicketResponse);
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
 }
 
@@ -54,10 +55,23 @@ message Place {
   string name = 7;
   string tel = 8;
   string website = 9;
-  repeated Photo photos = 10;
+  int32 cost = 10;
+  repeated string times = 11;
+  repeated Photo photos = 12;
 }
 
 message Photo {
   string url = 1;
 }
+
+message BuyTicketRequest {
+  string token = 1;
+  int32 place_id = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+message BuyTicketResponse {
+  bool response = 1;
+}
+
 /*protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative api/proto/kdt.proto*/

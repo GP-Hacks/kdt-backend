@@ -46,6 +46,7 @@ func setupRouter(log *slog.Logger, chatClient proto.ChatServiceClient, placesCli
 	router.Use(middleware.Recoverer)
 	router.Post("/api/chat/ask", chat.NewSendMessageHandler(log, chatClient))
 	router.Post("/api/places/get", places.NewGetPlacesHandler(log, placesClient))
+	router.Post("/api/places/buy", places.NewBuyTicketHandler(log, placesClient))
 	log.Info("Router successfully created")
 	return router
 }

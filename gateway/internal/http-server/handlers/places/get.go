@@ -1,9 +1,12 @@
 package places
 
 import (
+	"fmt"
 	"github.com/GP-Hack/kdt2024-commons/api/proto"
 	"github.com/GP-Hack/kdt2024-commons/json"
 	"github.com/go-chi/chi/v5/middleware"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"log/slog"
 	"net/http"
 )
@@ -22,89 +25,89 @@ type PlaceWithDefault struct {
 	Name        string         `json:"name"`
 	Tel         string         `json:"tel"`
 	Website     string         `json:"website"`
+	Cost        int            `json:"cost"`
+	Times       []string       `json:"times"`
 	Photos      []*proto.Photo `json:"photos"`
 }
 
 func withDefaultValues(resp *proto.GetPlacesResponse) *GetPlacesResponseWithDefault {
 	def := &GetPlacesResponseWithDefault{}
-	response := resp.GetResponse()
-	for _, place := range response {
-		placeDef := &PlaceWithDefault{}
-		placeDef.ID = int(place.Id)
-		placeDef.Category = place.Category
-		placeDef.Description = place.Description
-		placeDef.Latitude = place.Latitude
-		placeDef.Longitude = place.Longitude
-		placeDef.Location = place.Location
-		placeDef.Name = place.Name
-		placeDef.Tel = place.Tel
-		placeDef.Website = place.Website
-		if place.Photos == nil {
-			place.Photos = []*proto.Photo{}
+	for _, place := range resp.GetResponse() {
+		placeDef := &PlaceWithDefault{
+			ID:          int(place.Id),
+			Category:    place.Category,
+			Description: place.Description,
+			Latitude:    place.Latitude,
+			Longitude:   place.Longitude,
+			Location:    place.Location,
+			Name:        place.Name,
+			Tel:         place.Tel,
+			Website:     place.Website,
+			Cost:        int(place.Cost),
+			Times:       place.Times,
+			Photos:      place.Photos,
 		}
-		placeDef.Photos = place.Photos
+		if place.Photos == nil {
+			placeDef.Photos = []*proto.Photo{}
+		}
 		def.Response = append(def.Response, placeDef)
 	}
 	return def
 }
 
 func NewGetPlacesHandler(log *slog.Logger, placesClient proto.PlacesServiceClient) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handler.places.get.New"
 		ctx := r.Context()
-		log = log.With(slog.String("op", op), slog.Any("request_id", middleware.GetReqID(r.Context())), slog.Any("ip", r.RemoteAddr))
+		reqID := middleware.GetReqID(ctx)
+		logger := log.With(slog.String("op", op), slog.Any("request_id", reqID), slog.Any("ip", r.RemoteAddr))
 
 		select {
 		case <-ctx.Done():
-			log.Warn("Request cancelled by the client")
+			logger.Warn("Request cancelled by the client")
 			return
 		default:
 		}
 
-		var request *proto.GetPlacesRequest
+		var request proto.GetPlacesRequest
 		if err := json.ReadJSON(r, &request); err != nil {
+			logger.Error("Invalid JSON input", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusBadRequest, "Invalid JSON input")
-			log.Error("Failed to read JSON", slog.String("error", err.Error()))
-			return
-		}
-		// validation
-		category := request.GetCategory()
-		if category == "" {
-			json.WriteError(w, http.StatusBadRequest, "Invalid category field")
-			log.Warn("Invalid category field")
-			return
-		}
-		latitude := request.GetLatitude()
-		if latitude == 0 {
-			json.WriteError(w, http.StatusBadRequest, "Invalid latitude field")
-			log.Warn("Invalid latitude field")
-			return
-		}
-		longitude := request.GetLongitude()
-		if longitude == 0 {
-			json.WriteError(w, http.StatusBadRequest, "Invalid longitude field")
-			log.Warn("Invalid longitude field")
 			return
 		}
 
-		resp, err := placesClient.GetPlaces(ctx, &proto.GetPlacesRequest{
-			Category:  category,
-			Latitude:  latitude,
-			Longitude: longitude,
-		})
+		if err := validateRequest(&request); err != nil {
+			logger.Warn(err.Error())
+			json.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 
+		resp, err := placesClient.GetPlaces(ctx, &request)
 		if err != nil {
-			//if errors.Is(err, pgx.ErrNoRows) {
-			json.WriteError(w, http.StatusNotFound, "Places by this category not found")
-			log.Warn("Places by this category not found", slog.String("category", category))
+			if status.Code(err) == codes.NotFound {
+				logger.Warn("Places not found", slog.String("category", request.GetCategory()))
+				json.WriteError(w, http.StatusNotFound, "Places not found")
+				return
+			}
+			logger.Error("Failed to get places", slog.String("error", err.Error()))
+			json.WriteError(w, http.StatusInternalServerError, "Could not get places")
 			return
-			//}
-			/*json.WriteError(w, http.StatusInternalServerError, "Failed to get places")
-			log.Error("gRPC GetPlaces call failed", slog.String("error", err.Error()))
-			return*/
 		}
 
 		json.WriteJSON(w, http.StatusOK, withDefaultValues(resp))
-		log.Debug("Places got successfully", slog.Any("response", resp))
-	})
+		logger.Debug("Places retrieved successfully", slog.Any("response", resp))
+	}
+}
+
+func validateRequest(request *proto.GetPlacesRequest) error {
+	if request.GetCategory() == "" {
+		return fmt.Errorf("invalid category field")
+	}
+	if request.GetLatitude() == 0 {
+		return fmt.Errorf("invalid latitude field")
+	}
+	if request.GetLongitude() == 0 {
+		return fmt.Errorf("invalid longitude field")
+	}
+	return nil
 }
