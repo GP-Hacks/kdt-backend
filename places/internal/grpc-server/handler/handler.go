@@ -2,10 +2,13 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/GP-Hack/kdt2024-commons/api/proto"
 	"github.com/GP-Hack/kdt2024-places/internal/storage"
 	"github.com/jackc/pgx/v5"
+	"github.com/streadway/amqp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -14,6 +17,13 @@ import (
 	"sort"
 	"time"
 )
+
+type NotificationMessage struct {
+	UserID  string    `json:"user_id"`
+	Header  string    `json:"header"`
+	Content string    `json:"content"`
+	Time    time.Time `json:"time"`
+}
 
 const EarthRadius = 6371
 
@@ -50,10 +60,11 @@ type GRPCHandler struct {
 	proto.UnimplementedPlacesServiceServer
 	storage *storage.PostgresStorage
 	logger  *slog.Logger
+	mqch    *amqp.Channel
 }
 
-func NewGRPCHandler(server *grpc.Server, storage *storage.PostgresStorage, logger *slog.Logger) *GRPCHandler {
-	handler := &GRPCHandler{storage: storage, logger: logger}
+func NewGRPCHandler(server *grpc.Server, storage *storage.PostgresStorage, logger *slog.Logger, mqch *amqp.Channel) *GRPCHandler {
+	handler := &GRPCHandler{storage: storage, logger: logger, mqch: mqch}
 	proto.RegisterPlacesServiceServer(server, handler)
 	return handler
 }
@@ -165,6 +176,18 @@ func (h *GRPCHandler) BuyTicket(ctx context.Context, request *proto.BuyTicketReq
 			Response: false,
 		}, status.Errorf(codes.Internal, "Please try again later")
 	}
+
+	message := NotificationMessage{
+		UserID:  request.GetToken(),
+		Header:  "Напоминание о билете!",
+		Content: fmt.Sprintf("Вы приобрели билет на %s в %s", dbPlace.Name, request.GetTimestamp().AsTime().Format("15:04")),
+		Time:    time.Now(),
+	}
+	err = h.publishToRabbitMQ(message)
+	if err != nil {
+		h.logger.Error("Failed to publish message to RabbitMQ", slog.Any("error", err.Error()))
+	}
+
 	return &proto.BuyTicketResponse{
 		Response: true,
 	}, nil
@@ -175,4 +198,38 @@ func (h *GRPCHandler) HealthCheck(ctx context.Context, req *proto.HealthCheckReq
 	return &proto.HealthCheckResponse{
 		IsHealthy: true,
 	}, nil
+}
+
+func (h *GRPCHandler) publishToRabbitMQ(message NotificationMessage) error {
+	q, err := h.mqch.QueueDeclare(
+		"purchase_notifications", // TODO: from cfg
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		h.logger.Error("Failed to declare a queue", slog.Any("error", err.Error()))
+		return err
+	}
+	body, err := json.Marshal(message)
+	if err != nil {
+		h.logger.Error("Failed to marshal message to JSON", slog.Any("error", err.Error()))
+		return err
+	}
+	err = h.mqch.Publish(
+		"",
+		q.Name,
+		false,
+		false,
+		amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        body,
+		})
+	if err != nil {
+		h.logger.Error("Failed to publish a message", slog.Any("error", err.Error()))
+		return err
+	}
+	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/GP-Hack/kdt2024-places/internal/grpc-server/handler"
 	"github.com/GP-Hack/kdt2024-places/internal/storage"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/streadway/amqp"
 	"google.golang.org/grpc"
 	"io"
 	"log/slog"
@@ -221,7 +222,21 @@ func main() {
 	log.Info("Postgres connected")
 	defer storage.Close()
 
-	handler.NewGRPCHandler(grpcServer, storage, log)
+	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	if err != nil {
+		log.Error("Failed to connect to RabbitMQ", slog.Any("error", err.Error()))
+		return
+	}
+	defer conn.Close()
+
+	ch, err := conn.Channel()
+	if err != nil {
+		log.Error("Failed to open a channel", slog.Any("error", err.Error()))
+		return
+	}
+	defer ch.Close()
+
+	handler.NewGRPCHandler(grpcServer, storage, log, ch)
 	if err := grpcServer.Serve(l); err != nil {
 		log.Error("Error serving gRPC server for PlacesService", slog.String("address", cfg.Address), slog.String("error", err.Error()))
 	}

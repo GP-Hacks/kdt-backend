@@ -1,2 +1,4 @@
 env: "local"
 address: "localhost:8890"
+rabbitmq_address: "amqp://guest:guest@localhost:5672/"
+queue_name: "purchase_notifications"

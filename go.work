@@ -5,4 +5,5 @@ use (
 	./commons
 	./gateway
 	./places
+	./notifications
 )

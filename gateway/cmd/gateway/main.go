@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"github.com/GP-Hack/kdt2024-commons/api/proto"
 	"github.com/GP-Hack/kdt2024-commons/prettylogger"
 	"github.com/GP-Hack/kdt2024-gateway/config"
@@ -8,6 +9,8 @@ import (
 	places_client "github.com/GP-Hack/kdt2024-gateway/internal/grpc-clients/places"
 	"github.com/GP-Hack/kdt2024-gateway/internal/http-server/handlers/chat"
 	"github.com/GP-Hack/kdt2024-gateway/internal/http-server/handlers/places"
+	"github.com/GP-Hack/kdt2024-gateway/internal/http-server/handlers/tokens"
+	"github.com/GP-Hack/kdt2024-gateway/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"log/slog"
@@ -20,6 +23,21 @@ func main() {
 	log := prettylogger.SetupLogger(cfg.Env)
 	log.Info("Configuration loaded")
 	log.Info("Logger loaded")
+
+	var path string
+	flag.StringVar(&path, "path", "", "postgres://username:password@host:port/dbname")
+	flag.Parse()
+	if path == "" {
+		log.Error("No storage_path provided")
+		return
+	}
+
+	err := storage.Connect(path, cfg.MongoDBName, cfg.MongoDBCollection)
+	if err != nil {
+		log.Error("Error connecting to MongoDB", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	log.Info("Connected to MongoDB")
 
 	chatClient, err := chat_client.SetupChatClient(cfg.ChatAddress)
 	if err != nil {
@@ -47,6 +65,7 @@ func setupRouter(log *slog.Logger, chatClient proto.ChatServiceClient, placesCli
 	router.Post("/api/chat/ask", chat.NewSendMessageHandler(log, chatClient))
 	router.Post("/api/places/get", places.NewGetPlacesHandler(log, placesClient))
 	router.Post("/api/places/buy", places.NewBuyTicketHandler(log, placesClient))
+	router.Post("/api/user/token", tokens.NewAddTokenHandler(log))
 	log.Info("Router successfully created")
 	return router
 }
