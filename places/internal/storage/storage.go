@@ -10,7 +10,7 @@ import (
 )
 
 type PostgresStorage struct {
-	db *pgxpool.Pool
+	DB *pgxpool.Pool
 }
 
 type Place struct {
@@ -38,11 +38,11 @@ func NewPostgresStorage(storagePath string) (*PostgresStorage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	return &PostgresStorage{db: dbpool}, nil
+	return &PostgresStorage{DB: dbpool}, nil
 }
 
 func (s *PostgresStorage) Close() {
-	s.db.Close()
+	s.DB.Close()
 }
 
 func (s *PostgresStorage) GetPlaces(ctx context.Context) ([]*Place, error) {
@@ -61,7 +61,7 @@ func (s *PostgresStorage) GetPlaceById(ctx context.Context, placeID int) (*Place
 	const op = "storage.postgresql.GetPlaceById"
 	query := "SELECT id, category, description, latitude, longitude, location, name, tel, website, cost, time FROM places WHERE id = $1"
 	place := &Place{}
-	err := s.db.QueryRow(ctx, query, placeID).Scan(
+	err := s.DB.QueryRow(ctx, query, placeID).Scan(
 		&place.ID, &place.Category, &place.Description, &place.Latitude, &place.Longitude,
 		&place.Location, &place.Name, &place.Tel, &place.Website, &place.Cost, &place.Time,
 	)
@@ -78,7 +78,7 @@ func (s *PostgresStorage) GetPhotosById(ctx context.Context, placeID int) ([]*Ph
 	const op = "storage.postgresql.GetPhotosById"
 	query := "SELECT place_id, url FROM photos WHERE place_id = $1"
 
-	rows, err := s.db.Query(ctx, query, placeID)
+	rows, err := s.DB.Query(ctx, query, placeID)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
@@ -102,16 +102,40 @@ func (s *PostgresStorage) GetPhotosById(ctx context.Context, placeID int) ([]*Ph
 func (s *PostgresStorage) SaveOrder(ctx context.Context, token string, placeID int, orderTime time.Time, cost int) error {
 	const op = "storage.postgresql.SaveOrder"
 	query := "INSERT INTO orders (user_token, place_id, order_time, cost) VALUES ($1, $2, $3, $4)"
-	_, err := s.db.Exec(ctx, query, token, placeID, orderTime, cost)
+	_, err := s.DB.Exec(ctx, query, token, placeID, orderTime, cost)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 	return nil
 }
 
+func (s *PostgresStorage) GetCategories(ctx context.Context) ([]string, error) {
+	const op = "storage.postgresql.GetCategories"
+	rows, err := s.DB.Query(ctx, "SELECT DISTINCT category FROM places")
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	var categories []string
+	for rows.Next() {
+		var category string
+		if err := rows.Scan(&category); err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		categories = append(categories, category)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return categories, nil
+}
+
 func (s *PostgresStorage) fetchPlaces(ctx context.Context, query string, args ...interface{}) ([]*Place, error) {
 	const op = "storage.postgresql.fetchPlaces"
-	rows, err := s.db.Query(ctx, query, args...)
+	rows, err := s.DB.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}

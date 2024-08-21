@@ -6,4 +6,6 @@ use (
 	./gateway
 	./places
 	./notifications
+	./purchases
+	./charity
 )

@@ -25,7 +25,7 @@ func main() {
 	log.Info("Logger loaded")
 
 	var path string
-	flag.StringVar(&path, "path", "", "postgres://username:password@host:port/dbname")
+	flag.StringVar(&path, "path", "", "mongoDBUri")
 	flag.Parse()
 	if path == "" {
 		log.Error("No storage_path provided")
@@ -65,6 +65,7 @@ func setupRouter(log *slog.Logger, chatClient proto.ChatServiceClient, placesCli
 	router.Post("/api/chat/ask", chat.NewSendMessageHandler(log, chatClient))
 	router.Post("/api/places/get", places.NewGetPlacesHandler(log, placesClient))
 	router.Post("/api/places/buy", places.NewBuyTicketHandler(log, placesClient))
+	router.Get("/api/places/categories", places.NewGetCategoriesHandler(log, placesClient))
 	router.Post("/api/user/token", tokens.NewAddTokenHandler(log))
 	log.Info("Router successfully created")
 	return router

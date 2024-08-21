@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/GP-Hack/kdt2024-commons/api/proto"
+	"github.com/GP-Hack/kdt2024-places/config"
 	"github.com/GP-Hack/kdt2024-places/internal/storage"
 	"github.com/jackc/pgx/v5"
 	"github.com/streadway/amqp"
@@ -23,6 +24,14 @@ type NotificationMessage struct {
 	Header  string    `json:"header"`
 	Content string    `json:"content"`
 	Time    time.Time `json:"time"`
+}
+
+type PurchaseMessage struct {
+	User         string    `json:"user"`
+	PlaceID      int       `json:"place_id"`
+	EventTime    time.Time `json:"event_time"`
+	PurchaseTime time.Time `json:"purchase_time"`
+	Cost         int       `json:"cost"`
 }
 
 const EarthRadius = 6371
@@ -46,7 +55,7 @@ func toRadians(deg float64) float64 {
 
 func roundMinutes(t time.Time) time.Time {
 	minute := t.Minute()
-	roundedMinute := 5 * ((minute + 2) / 5)
+	roundedMinute := 5 * ((minute + 4) / 5)
 
 	if roundedMinute == 60 {
 		roundedMinute = 0
@@ -57,14 +66,15 @@ func roundMinutes(t time.Time) time.Time {
 }
 
 type GRPCHandler struct {
+	cfg *config.Config
 	proto.UnimplementedPlacesServiceServer
 	storage *storage.PostgresStorage
 	logger  *slog.Logger
 	mqch    *amqp.Channel
 }
 
-func NewGRPCHandler(server *grpc.Server, storage *storage.PostgresStorage, logger *slog.Logger, mqch *amqp.Channel) *GRPCHandler {
-	handler := &GRPCHandler{storage: storage, logger: logger, mqch: mqch}
+func NewGRPCHandler(cfg *config.Config, server *grpc.Server, storage *storage.PostgresStorage, logger *slog.Logger, mqch *amqp.Channel) *GRPCHandler {
+	handler := &GRPCHandler{cfg: cfg, storage: storage, logger: logger, mqch: mqch}
 	proto.RegisterPlacesServiceServer(server, handler)
 	return handler
 }
@@ -173,24 +183,47 @@ func (h *GRPCHandler) BuyTicket(ctx context.Context, request *proto.BuyTicketReq
 	if err != nil {
 		h.logger.Error("Failed to save order", slog.Any("error", err.Error()))
 		return &proto.BuyTicketResponse{
-			Response: false,
+			Response: "Failed to buy ticket",
 		}, status.Errorf(codes.Internal, "Please try again later")
 	}
 
 	message := NotificationMessage{
 		UserID:  request.GetToken(),
-		Header:  "Напоминание о билете!",
+		Header:  "Напоминание о покупке!",
 		Content: fmt.Sprintf("Вы приобрели билет на %s в %s", dbPlace.Name, request.GetTimestamp().AsTime().Format("15:04")),
-		Time:    time.Now(),
+		Time:    request.GetTimestamp().AsTime().Add(-15 * time.Minute),
 	}
-	err = h.publishToRabbitMQ(message)
+	err = h.publishToRabbitMQ(message, h.cfg.QueueNotifications)
+	if err != nil {
+		h.logger.Error("Failed to publish message to RabbitMQ", slog.Any("error", err.Error()))
+	}
+
+	purchaseMessage := PurchaseMessage{
+		User:         request.GetToken(),
+		PlaceID:      dbPlace.ID,
+		EventTime:    request.GetTimestamp().AsTime(),
+		PurchaseTime: time.Now(),
+		Cost:         dbPlace.Cost,
+	}
+	err = h.publishToRabbitMQ(purchaseMessage, h.cfg.QueuePurchases)
 	if err != nil {
 		h.logger.Error("Failed to publish message to RabbitMQ", slog.Any("error", err.Error()))
 	}
 
 	return &proto.BuyTicketResponse{
-		Response: true,
+		Response: "Successfully bought ticket",
 	}, nil
+}
+
+func (h *GRPCHandler) GetCategories(ctx context.Context, request *proto.GetCategoriesRequest) (*proto.GetCategoriesResponse, error) {
+	h.logger.Debug("Processing GetCategories")
+
+	categories, err := h.storage.GetCategories(ctx)
+	if err != nil {
+		return nil, h.handleStorageError(err, "categories")
+	}
+
+	return &proto.GetCategoriesResponse{Categories: categories}, nil
 }
 
 func (h *GRPCHandler) HealthCheck(ctx context.Context, req *proto.HealthCheckRequest) (*proto.HealthCheckResponse, error) {
@@ -200,9 +233,9 @@ func (h *GRPCHandler) HealthCheck(ctx context.Context, req *proto.HealthCheckReq
 	}, nil
 }
 
-func (h *GRPCHandler) publishToRabbitMQ(message NotificationMessage) error {
+func (h *GRPCHandler) publishToRabbitMQ(message interface{}, queueName string) error {
 	q, err := h.mqch.QueueDeclare(
-		"purchase_notifications", // TODO: from cfg
+		queueName,
 		true,
 		false,
 		false,

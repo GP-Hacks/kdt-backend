@@ -95,7 +95,7 @@ func NewGetPlacesHandler(log *slog.Logger, placesClient proto.PlacesServiceClien
 		}
 
 		json.WriteJSON(w, http.StatusOK, withDefaultValues(resp))
-		logger.Debug("Places retrieved successfully", slog.Any("response", resp))
+		logger.Debug("Places retrieved successfully")
 	}
 }
 

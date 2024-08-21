@@ -31,7 +31,7 @@ func main() {
 	log.Info("Logger loaded")
 
 	var path string
-	flag.StringVar(&path, "path", "", "postgres://username:password@host:port/dbname")
+	flag.StringVar(&path, "path", "", "mongoDBUri")
 	flag.Parse()
 	if path == "" {
 		log.Error("No storage_path provided")
@@ -80,11 +80,12 @@ func main() {
 	app, err := firebase.NewApp(context.Background(), nil, opt)
 	if err != nil {
 		log.Error("Error initializing FirebaseApp", slog.String("error", err.Error()))
-
+		return
 	}
 	client, err := app.Messaging(context.Background())
 	if err != nil {
 		log.Error("Error getting Messaging client", slog.String("error", err.Error()))
+		return
 	}
 
 	for msg := range msgs {
@@ -109,10 +110,20 @@ func main() {
 			continue
 		}
 
+		delay := time.Until(notification.Time)
+		if delay < 0 {
+			log.Warn("Notification time is in the past, sending immediately")
+			delay = 0
+		}
+
 		for _, token := range userTokens.Tokens {
-			if err := sendNotification(token, notification.Header, notification.Content, log, client); err != nil {
-				log.Error("Failed to send notification", slog.String("error", err.Error()))
-			}
+			go func(token string) {
+				time.AfterFunc(delay, func() {
+					if err := sendNotification(token, notification.Header, notification.Content, log, client); err != nil {
+						log.Error("Failed to send notification", slog.String("error", err.Error()))
+					}
+				})
+			}(token)
 		}
 	}
 }
@@ -130,7 +141,8 @@ func sendNotification(token, header, content string, log *slog.Logger, client *m
 
 	_, err := client.Send(context.Background(), message)
 	if err != nil {
-		log.Error("Error sending message", slog.String("error", err.Error()))
+		log.Warn("Error sending message", slog.String("error", err.Error()))
+		return err
 	}
 
 	log.Debug("Successfully sent message")

@@ -31,6 +31,7 @@ message HealthCheckResponse {
 
 service PlacesService {
   rpc GetPlaces(GetPlacesRequest) returns (GetPlacesResponse);
+  rpc GetCategories(GetCategoriesRequest) returns (GetCategoriesResponse);
   rpc BuyTicket(BuyTicketRequest) returns (BuyTicketResponse);
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
 }
@@ -64,6 +65,12 @@ message Photo {
   string url = 1;
 }
 
+message GetCategoriesRequest {}
+
+message GetCategoriesResponse {
+  repeated string categories = 1;
+}
+
 message BuyTicketRequest {
   string token = 1;
   int32 place_id = 2;
@@ -71,7 +78,7 @@ message BuyTicketRequest {
 }
 
 message BuyTicketResponse {
-  bool response = 1;
+  string response = 1;
 }
 
 /*protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative api/proto/kdt.proto*/

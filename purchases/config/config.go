@@ -7,18 +7,17 @@ import (
 )
 
 type Config struct {
-	Env                string `yaml:"env" env-required:"true"`
-	Address            string `yaml:"address" env-required:"true"`
-	RabbitMQAddress    string `yaml:"rabbitmq_address" env-required:"true"`
-	QueueNotifications string `yaml:"queue_notifications" env-required:"true"`
-	QueuePurchases     string `yaml:"queue_purchases" env-required:"true"`
+	Env             string `yaml:"env" env-required:"true"`
+	Address         string `yaml:"address" env-required:"true"`
+	RabbitMQAddress string `yaml:"rabbitmq_address" env-required:"true"`
+	QueueName       string `yaml:"queue_name" env-required:"true"`
 }
 
 func MustLoad() *Config {
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
 		// TODO: move to env
-		configPath = "places/config/config.yaml"
+		configPath = "purchases/config/config.yaml"
 		//log.Fatal("CONFIG_PATH environment variable is not set")
 	}
 
