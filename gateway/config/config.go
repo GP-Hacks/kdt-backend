@@ -12,6 +12,7 @@ type Config struct {
 	Address           string        `yaml:"address" env-required:"true"`
 	ChatAddress       string        `yaml:"chat_address" env-required:"true"`
 	PlacesAddress     string        `yaml:"places_address" env-required:"true"`
+	CharityAddress    string        `yaml:"charity_address" env-required:"true"`
 	Timeout           time.Duration `yaml:"timeout" env-required:"true"`
 	IdleTimeout       time.Duration `yaml:"idle_timeout" env-required:"true"`
 	MongoDBName       string        `yaml:"mongodb_name" env-required:"true"`

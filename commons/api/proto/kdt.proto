@@ -81,4 +81,42 @@ message BuyTicketResponse {
   string response = 1;
 }
 
+service CharityService {
+  rpc GetCollections(GetCollectionsRequest) returns (GetCollectionsResponse);
+  rpc GetCategories(GetCategoriesRequest) returns (GetCategoriesResponse);
+  rpc Donate(DonateRequest) returns (DonateResponse);
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message GetCollectionsRequest {
+  string category = 1;
+}
+
+message GetCollectionsResponse {
+  repeated Collection response = 1;
+}
+
+message Collection {
+  int32 id = 1;
+  string category = 2;
+  string name = 3;
+  string description = 4;
+  string organization = 5;
+  string phone = 6;
+  string website = 7;
+  int32 goal = 8;
+  int32 current = 9;
+}
+
+message DonateRequest {
+  string token = 1;
+  int32 collection_id = 2;
+  int32 amount = 3;
+}
+
+message DonateResponse {
+  string response = 1;
+}
+
+
 /*protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative api/proto/kdt.proto*/

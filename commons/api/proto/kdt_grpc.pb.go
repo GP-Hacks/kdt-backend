@@ -373,3 +373,219 @@ var PlacesService_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "api/proto/kdt.proto",
 }
+
+const (
+	CharityService_GetCollections_FullMethodName = "/api.CharityService/GetCollections"
+	CharityService_GetCategories_FullMethodName  = "/api.CharityService/GetCategories"
+	CharityService_Donate_FullMethodName         = "/api.CharityService/Donate"
+	CharityService_HealthCheck_FullMethodName    = "/api.CharityService/HealthCheck"
+)
+
+// CharityServiceClient is the client API for CharityService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type CharityServiceClient interface {
+	GetCollections(ctx context.Context, in *GetCollectionsRequest, opts ...grpc.CallOption) (*GetCollectionsResponse, error)
+	GetCategories(ctx context.Context, in *GetCategoriesRequest, opts ...grpc.CallOption) (*GetCategoriesResponse, error)
+	Donate(ctx context.Context, in *DonateRequest, opts ...grpc.CallOption) (*DonateResponse, error)
+	HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error)
+}
+
+type charityServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewCharityServiceClient(cc grpc.ClientConnInterface) CharityServiceClient {
+	return &charityServiceClient{cc}
+}
+
+func (c *charityServiceClient) GetCollections(ctx context.Context, in *GetCollectionsRequest, opts ...grpc.CallOption) (*GetCollectionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCollectionsResponse)
+	err := c.cc.Invoke(ctx, CharityService_GetCollections_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *charityServiceClient) GetCategories(ctx context.Context, in *GetCategoriesRequest, opts ...grpc.CallOption) (*GetCategoriesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCategoriesResponse)
+	err := c.cc.Invoke(ctx, CharityService_GetCategories_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *charityServiceClient) Donate(ctx context.Context, in *DonateRequest, opts ...grpc.CallOption) (*DonateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DonateResponse)
+	err := c.cc.Invoke(ctx, CharityService_Donate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *charityServiceClient) HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HealthCheckResponse)
+	err := c.cc.Invoke(ctx, CharityService_HealthCheck_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CharityServiceServer is the server API for CharityService service.
+// All implementations must embed UnimplementedCharityServiceServer
+// for forward compatibility.
+type CharityServiceServer interface {
+	GetCollections(context.Context, *GetCollectionsRequest) (*GetCollectionsResponse, error)
+	GetCategories(context.Context, *GetCategoriesRequest) (*GetCategoriesResponse, error)
+	Donate(context.Context, *DonateRequest) (*DonateResponse, error)
+	HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error)
+	mustEmbedUnimplementedCharityServiceServer()
+}
+
+// UnimplementedCharityServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedCharityServiceServer struct{}
+
+func (UnimplementedCharityServiceServer) GetCollections(context.Context, *GetCollectionsRequest) (*GetCollectionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetCollections not implemented")
+}
+func (UnimplementedCharityServiceServer) GetCategories(context.Context, *GetCategoriesRequest) (*GetCategoriesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetCategories not implemented")
+}
+func (UnimplementedCharityServiceServer) Donate(context.Context, *DonateRequest) (*DonateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Donate not implemented")
+}
+func (UnimplementedCharityServiceServer) HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HealthCheck not implemented")
+}
+func (UnimplementedCharityServiceServer) mustEmbedUnimplementedCharityServiceServer() {}
+func (UnimplementedCharityServiceServer) testEmbeddedByValue()                        {}
+
+// UnsafeCharityServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to CharityServiceServer will
+// result in compilation errors.
+type UnsafeCharityServiceServer interface {
+	mustEmbedUnimplementedCharityServiceServer()
+}
+
+func RegisterCharityServiceServer(s grpc.ServiceRegistrar, srv CharityServiceServer) {
+	// If the following call pancis, it indicates UnimplementedCharityServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&CharityService_ServiceDesc, srv)
+}
+
+func _CharityService_GetCollections_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCollectionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CharityServiceServer).GetCollections(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CharityService_GetCollections_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CharityServiceServer).GetCollections(ctx, req.(*GetCollectionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CharityService_GetCategories_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCategoriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CharityServiceServer).GetCategories(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CharityService_GetCategories_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CharityServiceServer).GetCategories(ctx, req.(*GetCategoriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CharityService_Donate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DonateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CharityServiceServer).Donate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CharityService_Donate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CharityServiceServer).Donate(ctx, req.(*DonateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CharityService_HealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HealthCheckRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CharityServiceServer).HealthCheck(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CharityService_HealthCheck_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CharityServiceServer).HealthCheck(ctx, req.(*HealthCheckRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// CharityService_ServiceDesc is the grpc.ServiceDesc for CharityService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var CharityService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.CharityService",
+	HandlerType: (*CharityServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetCollections",
+			Handler:    _CharityService_GetCollections_Handler,
+		},
+		{
+			MethodName: "GetCategories",
+			Handler:    _CharityService_GetCategories_Handler,
+		},
+		{
+			MethodName: "Donate",
+			Handler:    _CharityService_Donate_Handler,
+		},
+		{
+			MethodName: "HealthCheck",
+			Handler:    _CharityService_HealthCheck_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "api/proto/kdt.proto",
+}

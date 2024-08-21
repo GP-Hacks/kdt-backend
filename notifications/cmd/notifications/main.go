@@ -112,8 +112,13 @@ func main() {
 			log.Warn("Failed to find user tokens", slog.String("error", err.Error()))
 			continue
 		}
-
-		delay := time.Until(notification.Time)
+		locationMSK := time.FixedZone("MSK", 3*60*60)
+		notificationTime := time.Date(
+			notification.Time.Year(), notification.Time.Month(), notification.Time.Day(),
+			notification.Time.Hour(), notification.Time.Minute(), notification.Time.Second(),
+			notification.Time.Nanosecond(), locationMSK)
+		notification.Time = notificationTime
+		delay := time.Until(notificationTime)
 		if delay < 0 {
 			log.Warn("Notification time is in the past, sending immediately")
 			delay = 0

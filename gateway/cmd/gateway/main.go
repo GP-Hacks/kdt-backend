@@ -5,8 +5,10 @@ import (
 	"github.com/GP-Hack/kdt2024-commons/api/proto"
 	"github.com/GP-Hack/kdt2024-commons/prettylogger"
 	"github.com/GP-Hack/kdt2024-gateway/config"
-	chat_client "github.com/GP-Hack/kdt2024-gateway/internal/grpc-clients/chat"
-	places_client "github.com/GP-Hack/kdt2024-gateway/internal/grpc-clients/places"
+	charityclient "github.com/GP-Hack/kdt2024-gateway/internal/grpc-clients/charity"
+	chatclient "github.com/GP-Hack/kdt2024-gateway/internal/grpc-clients/chat"
+	placesclient "github.com/GP-Hack/kdt2024-gateway/internal/grpc-clients/places"
+	"github.com/GP-Hack/kdt2024-gateway/internal/http-server/handlers/charity"
 	"github.com/GP-Hack/kdt2024-gateway/internal/http-server/handlers/chat"
 	"github.com/GP-Hack/kdt2024-gateway/internal/http-server/handlers/places"
 	"github.com/GP-Hack/kdt2024-gateway/internal/http-server/handlers/tokens"
@@ -39,25 +41,32 @@ func main() {
 	}
 	log.Info("Connected to MongoDB")
 
-	chatClient, err := chat_client.SetupChatClient(cfg.ChatAddress)
+	chatClient, err := chatclient.SetupChatClient(cfg.ChatAddress)
 	if err != nil {
 		log.Error("Error setting up ChatClient", slog.String("address", cfg.ChatAddress), slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 	log.Info("Connected to ChatService", slog.String("address", cfg.ChatAddress))
 
-	placesClient, err := places_client.SetupPlacesClient(cfg.PlacesAddress)
+	placesClient, err := placesclient.SetupPlacesClient(cfg.PlacesAddress)
 	if err != nil {
 		log.Error("Error setting up PlacesClient", slog.String("address", cfg.PlacesAddress), slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 	log.Info("Connected to PlacesService", slog.String("address", cfg.PlacesAddress))
 
-	router := setupRouter(log, chatClient, placesClient)
+	charityClient, err := charityclient.SetupCharityClient(cfg.CharityAddress)
+	if err != nil {
+		log.Error("Error setting up CharityClient", slog.String("address", cfg.CharityAddress), slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	log.Info("Connected to CharityService", slog.String("address", cfg.CharityAddress))
+
+	router := setupRouter(log, chatClient, placesClient, charityClient)
 	startServer(cfg, router, log)
 }
 
-func setupRouter(log *slog.Logger, chatClient proto.ChatServiceClient, placesClient proto.PlacesServiceClient) *chi.Mux {
+func setupRouter(log *slog.Logger, chatClient proto.ChatServiceClient, placesClient proto.PlacesServiceClient, charityClient proto.CharityServiceClient) *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
@@ -66,6 +75,9 @@ func setupRouter(log *slog.Logger, chatClient proto.ChatServiceClient, placesCli
 	router.Post("/api/places/get", places.NewGetPlacesHandler(log, placesClient))
 	router.Post("/api/places/buy", places.NewBuyTicketHandler(log, placesClient))
 	router.Get("/api/places/categories", places.NewGetCategoriesHandler(log, placesClient))
+	router.Post("/api/charity/get", charity.NewGetCollectionsHandler(log, charityClient))
+	router.Post("/api/charity/donate", charity.NewDonateHandler(log, charityClient))
+	router.Get("/api/charity/categories", charity.NewGetCategoriesHandler(log, charityClient))
 	router.Post("/api/user/token", tokens.NewAddTokenHandler(log))
 	log.Info("Router successfully created")
 	return router

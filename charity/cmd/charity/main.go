@@ -4,9 +4,9 @@ import (
 	"context"
 	"flag"
 	"github.com/GP-Hack/kdt2024-commons/prettylogger"
-	"github.com/GP-Hack/kdt2024-places/config"
-	"github.com/GP-Hack/kdt2024-places/internal/grpc-server/handler"
-	"github.com/GP-Hack/kdt2024-places/internal/storage"
+	"github.com/GP-Hacks/kdt2024-charity/config"
+	"github.com/GP-Hacks/kdt2024-charity/internal/grpc-server/handler"
+	"github.com/GP-Hacks/kdt2024-charity/internal/storage"
 	"github.com/streadway/amqp"
 	"google.golang.org/grpc"
 	"log/slog"
@@ -22,7 +22,7 @@ func main() {
 	grpcServer := grpc.NewServer()
 	l, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
-		log.Error("Failed to start listener for PlacesService", slog.String("error", err.Error()), slog.String("address", cfg.Address))
+		log.Error("Failed to start listener for CharityService", slog.String("error", err.Error()), slog.String("address", cfg.Address))
 		return
 	}
 	defer l.Close()
@@ -44,28 +44,16 @@ func main() {
 	defer storage.Close()
 
 	_, err = storage.DB.Exec(context.Background(), `
-		CREATE TABLE IF NOT EXISTS places (
+		CREATE TABLE IF NOT EXISTS charity (
 			id SERIAL PRIMARY KEY,
 			category VARCHAR(255),
+			name TEXT,
 			description TEXT,
-			latitude DOUBLE PRECISION,
-			longitude DOUBLE PRECISION,
-			location TEXT,
-			name VARCHAR(255),
-			tel VARCHAR(50),
+			organization TEXT,
+			phone VARCHAR(50),
 			website VARCHAR(255),
-			cost INT,
-			time VARCHAR(50)
-		)
-	`)
-	if err != nil {
-		log.Error("Failed to create table", slog.String("error", err.Error()))
-	}
-
-	_, err = storage.DB.Exec(context.Background(), `
-		CREATE TABLE IF NOT EXISTS photos (
-			place_id INT REFERENCES places(id) ON DELETE CASCADE,
-			url TEXT
+			goal INT,
+			current INT
 		)
 	`)
 	if err != nil {
@@ -93,6 +81,6 @@ func main() {
 
 	handler.NewGRPCHandler(cfg, grpcServer, storage, log, ch)
 	if err := grpcServer.Serve(l); err != nil {
-		log.Error("Error serving gRPC server for PlacesService", slog.String("address", cfg.Address), slog.String("error", err.Error()))
+		log.Error("Error serving gRPC server for CharityService", slog.String("address", cfg.Address), slog.String("error", err.Error()))
 	}
 }

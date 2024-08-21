@@ -1,0 +1,4 @@
+env: "local"
+address: "localhost:8893"
+rabbitmq_address: "amqp://guest:guest@localhost:5672/"
+queue_name: "purchases"
