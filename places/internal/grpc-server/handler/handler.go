@@ -27,7 +27,7 @@ type NotificationMessage struct {
 }
 
 type PurchaseMessage struct {
-	User         string    `json:"user"`
+	UserToken    string    `json:"user_token"`
 	PlaceID      int       `json:"place_id"`
 	EventTime    time.Time `json:"event_time"`
 	PurchaseTime time.Time `json:"purchase_time"`
@@ -179,14 +179,6 @@ func (h *GRPCHandler) BuyTicket(ctx context.Context, request *proto.BuyTicketReq
 		return nil, h.handleStorageError(err, "place")
 	}
 
-	err = h.storage.SaveOrder(ctx, request.GetToken(), int(request.GetPlaceId()), request.GetTimestamp().AsTime(), dbPlace.Cost)
-	if err != nil {
-		h.logger.Error("Failed to save order", slog.Any("error", err.Error()))
-		return &proto.BuyTicketResponse{
-			Response: "Failed to buy ticket",
-		}, status.Errorf(codes.Internal, "Please try again later")
-	}
-
 	message := NotificationMessage{
 		UserID:  request.GetToken(),
 		Header:  "Напоминание о покупке!",
@@ -199,7 +191,7 @@ func (h *GRPCHandler) BuyTicket(ctx context.Context, request *proto.BuyTicketReq
 	}
 
 	purchaseMessage := PurchaseMessage{
-		User:         request.GetToken(),
+		UserToken:    request.GetToken(),
 		PlaceID:      dbPlace.ID,
 		EventTime:    request.GetTimestamp().AsTime(),
 		PurchaseTime: time.Now(),

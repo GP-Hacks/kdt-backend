@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"github.com/GP-Hack/kdt2024-commons/prettylogger"
-	"github.com/GP-Hacks/kdt2024-notifications/config"
+	"github.com/GP-Hacks/kdt2024-purchases/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/streadway/amqp"
 	"log/slog"
@@ -13,7 +13,7 @@ import (
 )
 
 type PurchaseMessage struct {
-	User         string    `json:"user"`
+	UserToken    string    `json:"user_token"`
 	PlaceID      int       `json:"place_id"`
 	EventTime    time.Time `json:"event_time"`
 	PurchaseTime time.Time `json:"purchase_time"`
@@ -40,10 +40,11 @@ func main() {
 		return
 	}
 	defer dbpool.Close()
+	log.Info("PostgreSQL connected")
 
 	_, err = dbpool.Exec(context.Background(), `
-		CREATE TABLE IF NOT EXISTS purchases (
-			user TEXT,
+		CREATE TABLE IF NOT EXISTS ticket_purchases (
+			user_token TEXT,
 			place_id INT REFERENCES places(id) ON DELETE CASCADE,
 			event_time TIMESTAMP,
 			purchase_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -83,6 +84,8 @@ func main() {
 		return
 	}
 
+	log.Info("RabbitMQ connected")
+
 	for msg := range msgs {
 		var dbmsg PurchaseMessage
 		if err := json.Unmarshal(msg.Body, &dbmsg); err != nil {
@@ -90,15 +93,16 @@ func main() {
 			continue
 		}
 
-		if dbmsg.User == "" || dbmsg.PlaceID == 0 || dbmsg.EventTime.IsZero() || dbmsg.Cost == 0 {
-			log.Warn("Invalid purchase message", slog.String("error", err.Error()))
+		if dbmsg.UserToken == "" || dbmsg.PlaceID == 0 || dbmsg.EventTime.IsZero() || dbmsg.Cost == 0 {
+			log.Warn("Invalid purchase message")
 			continue
 		}
 
-		_, err := dbpool.Exec(context.Background(), `INSERT INTO purchases(user, place_id, event_time, purchase_time, cost) VALUES ($1, $2, $3, $4, $5)`, dbmsg.User, dbmsg.PlaceID, dbmsg.EventTime, dbmsg.PurchaseTime, dbmsg.Cost)
+		_, err := dbpool.Exec(context.Background(), `INSERT INTO ticket_purchases(user_token, place_id, event_time, purchase_time, cost) VALUES ($1, $2, $3, $4, $5)`, dbmsg.UserToken, dbmsg.PlaceID, dbmsg.EventTime, dbmsg.PurchaseTime, dbmsg.Cost)
 		if err != nil {
 			log.Error("Failed to save purchase to Postgres", slog.String("error", err.Error()))
 			continue
 		}
+		log.Debug("Saved ticket purchase")
 	}
 }

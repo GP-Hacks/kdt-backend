@@ -45,6 +45,7 @@ func main() {
 		return
 	}
 	defer mongoClient.Disconnect(context.Background())
+	log.Info("MongoDB connected")
 
 	collection := mongoClient.Database(cfg.MongoDBName).Collection(cfg.MongoDBCollection)
 
@@ -75,6 +76,7 @@ func main() {
 		log.Error("Failed to register a consumer", slog.String("error", err.Error()))
 		return
 	}
+	log.Info("RabbitMQ connected")
 
 	opt := option.WithCredentialsFile(cfg.FirebaseCfg)
 	app, err := firebase.NewApp(context.Background(), nil, opt)
@@ -87,6 +89,7 @@ func main() {
 		log.Error("Error getting Messaging client", slog.String("error", err.Error()))
 		return
 	}
+	log.Info("Firebase connected")
 
 	for msg := range msgs {
 		var notification NotificationMessage
@@ -96,7 +99,7 @@ func main() {
 		}
 
 		if notification.Header == "" || notification.Content == "" || notification.UserID == "" {
-			log.Warn("Invalid notification message", slog.String("error", err.Error()))
+			log.Warn("Invalid notification message")
 			continue
 		}
 
@@ -119,9 +122,7 @@ func main() {
 		for _, token := range userTokens.Tokens {
 			go func(token string) {
 				time.AfterFunc(delay, func() {
-					if err := sendNotification(token, notification.Header, notification.Content, log, client); err != nil {
-						log.Error("Failed to send notification", slog.String("error", err.Error()))
-					}
+					_ = sendNotification(token, notification.Header, notification.Content, log, client)
 				})
 			}(token)
 		}

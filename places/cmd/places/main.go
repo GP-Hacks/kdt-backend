@@ -18,7 +18,7 @@ import (
 	"net/http"
 )
 
-func fetchAndStoreData(storage *storage.PostgresStorage) error {
+func fetchAndStoreData(storage *storage.PostgresStorage, flag bool) error {
 	url := "https://api.foursquare.com/v3/places/search?categories=10001%2C10002%2C10004%2C10009%2C10027%2C10028%2C10029%2C10030%2C10031%2C10044%2C10046%2C10047%2C10056%2C10058%2C10059%2C10068%2C10069%2C16005%2C16011%2C16020%2C16025%2C16026%2C16031%2C16034%2C16035%2C16038%2C16039%2C16041%2C16046%2C16047%2C16052&exclude_all_chains=true&fields=categories%2Cname%2Cdescription%2Cgeocodes%2Clocation%2Ctel%2Cphotos%2Cwebsite&polygon=54.9887%2C48.0821~56.2968%2C49.1917~56.5096%2C50.3453~55.8923%2C51.4659~55.7380%2C54.0586~55.1836%2C53.0369~54.3534%2C53.2347~54.7675%2C51.1912~54.9193%2C49.2466~54.6405%2C48.6644&limit=50"
 
 	req, _ := http.NewRequest("GET", url, nil)
@@ -28,13 +28,7 @@ func fetchAndStoreData(storage *storage.PostgresStorage) error {
 	res, _ := http.DefaultClient.Do(req)
 	defer res.Body.Close()
 
-	var count int
-	err := storage.DB.QueryRow(context.Background(), `SELECT COUNT(*) FROM places`).Scan(&count)
-	if err != nil {
-		return fmt.Errorf("failed to check existing data: %w", err)
-	}
-
-	if count > 0 {
+	if flag {
 		fmt.Println("Data already exists in the database. Skipping fetch and store.")
 		return nil
 	}
@@ -129,7 +123,7 @@ func fetchAndStoreData(storage *storage.PostgresStorage) error {
 		}
 	}
 
-	_, err = storage.DB.Exec(context.Background(), `
+	_, err := storage.DB.Exec(context.Background(), `
 		CREATE TABLE IF NOT EXISTS places (
 			id SERIAL PRIMARY KEY,
 			category VARCHAR(255),
@@ -174,7 +168,7 @@ func fetchAndStoreData(storage *storage.PostgresStorage) error {
 			return fmt.Errorf("failed to insert data into table: %w", err)
 		}
 	}
-
+	fmt.Println("Data successfully fetched and stored")
 	return nil
 }
 
@@ -191,9 +185,11 @@ func main() {
 		return
 	}
 	defer l.Close()
-
+	var flagF bool
 	var path string
 	flag.StringVar(&path, "path", "", "postgres://username:password@host:port/dbname")
+	flag.BoolVar(&flagF, "f", false, "Set to true if -f flag is provided")
+
 	flag.Parse()
 	if path == "" {
 		log.Error("No storage_path provided")
@@ -208,11 +204,10 @@ func main() {
 	log.Info("Postgres connected")
 	defer storage.Close()
 
-	if err := fetchAndStoreData(storage); err != nil {
+	if err := fetchAndStoreData(storage, flagF); err != nil {
 		log.Error("Failed to fetch and store data", slog.String("error", err.Error()))
 		return
 	}
-	log.Info("Data successfully fetched and stored")
 
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
 	if err != nil {
@@ -228,7 +223,7 @@ func main() {
 	}
 	defer ch.Close()
 
-	handler.NewGRPCHandler(grpcServer, storage, log, ch)
+	handler.NewGRPCHandler(cfg, grpcServer, storage, log, ch)
 	if err := grpcServer.Serve(l); err != nil {
 		log.Error("Error serving gRPC server for PlacesService", slog.String("address", cfg.Address), slog.String("error", err.Error()))
 	}

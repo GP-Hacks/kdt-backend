@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"time"
 )
 
 type PostgresStorage struct {
@@ -97,16 +96,6 @@ func (s *PostgresStorage) GetPhotosById(ctx context.Context, placeID int) ([]*Ph
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	return photos, nil
-}
-
-func (s *PostgresStorage) SaveOrder(ctx context.Context, token string, placeID int, orderTime time.Time, cost int) error {
-	const op = "storage.postgresql.SaveOrder"
-	query := "INSERT INTO orders (user_token, place_id, order_time, cost) VALUES ($1, $2, $3, $4)"
-	_, err := s.DB.Exec(ctx, query, token, placeID, orderTime, cost)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	return nil
 }
 
 func (s *PostgresStorage) GetCategories(ctx context.Context) ([]string, error) {
