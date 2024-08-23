@@ -1,34 +1,23 @@
 package config
 
-import (
-	"github.com/ilyakaznacheev/cleanenv"
-	"log"
-	"os"
-)
+import "os"
 
 type Config struct {
-	Env             string `yaml:"env" env-required:"true"`
-	Address         string `yaml:"address" env-required:"true"`
-	RabbitMQAddress string `yaml:"rabbitmq_address" env-required:"true"`
-	QueueName       string `yaml:"queue_name" env-required:"true"`
+	Env             string
+	Address         string
+	LocalAddress    string
+	PostgresAddress string
+	RabbitMQAddress string
+	QueueName       string
 }
 
 func MustLoad() *Config {
-	configPath := os.Getenv("CONFIG_PATH")
-	if configPath == "" {
-		// TODO: move to env
-		configPath = "charity/config/config.yaml"
-		//log.Fatal("CONFIG_PATH environment variable is not set")
+	return &Config{
+		Env:             "local",
+		Address:         os.Getenv("SERVICE_ADDRESS"),
+		PostgresAddress: os.Getenv("POSTGRES_ADDRESS"),
+		RabbitMQAddress: os.Getenv("RABBITMQ_ADDRESS"),
+		QueueName:       os.Getenv("QUEUE_NAME"),
+		LocalAddress:    os.Getenv("LOCAL_ADDRESS"),
 	}
-
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		log.Fatalf("%s: CONFIG_PATH does not exist", configPath)
-	}
-
-	var config Config
-	if err := cleanenv.ReadConfig(configPath, &config); err != nil {
-		log.Fatalf("%s: CONFIG_PATH read error: %v", configPath, err)
-	}
-
-	return &config
 }

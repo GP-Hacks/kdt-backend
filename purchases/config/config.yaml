@@ -1,4 +1,0 @@
-env: "local"
-address: "localhost:8892"
-rabbitmq_address: "amqp://guest:guest@localhost:5672/"
-queue_name: "purchases"

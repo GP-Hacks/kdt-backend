@@ -589,3 +589,371 @@ var CharityService_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "api/proto/kdt.proto",
 }
+
+const (
+	VotesService_GetVotes_FullMethodName        = "/api.VotesService/GetVotes"
+	VotesService_GetRateInfo_FullMethodName     = "/api.VotesService/GetRateInfo"
+	VotesService_GetPetitionInfo_FullMethodName = "/api.VotesService/GetPetitionInfo"
+	VotesService_GetChoiceInfo_FullMethodName   = "/api.VotesService/GetChoiceInfo"
+	VotesService_VoteRate_FullMethodName        = "/api.VotesService/VoteRate"
+	VotesService_VotePetition_FullMethodName    = "/api.VotesService/VotePetition"
+	VotesService_VoteChoice_FullMethodName      = "/api.VotesService/VoteChoice"
+	VotesService_HealthCheck_FullMethodName     = "/api.VotesService/HealthCheck"
+)
+
+// VotesServiceClient is the client API for VotesService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type VotesServiceClient interface {
+	GetVotes(ctx context.Context, in *GetVotesRequest, opts ...grpc.CallOption) (*GetVotesResponse, error)
+	GetRateInfo(ctx context.Context, in *GetVoteInfoRequest, opts ...grpc.CallOption) (*GetRateInfoResponse, error)
+	GetPetitionInfo(ctx context.Context, in *GetVoteInfoRequest, opts ...grpc.CallOption) (*GetPetitionInfoResponse, error)
+	GetChoiceInfo(ctx context.Context, in *GetVoteInfoRequest, opts ...grpc.CallOption) (*GetChoiceInfoResponse, error)
+	VoteRate(ctx context.Context, in *VoteRateRequest, opts ...grpc.CallOption) (*VoteResponse, error)
+	VotePetition(ctx context.Context, in *VotePetitionRequest, opts ...grpc.CallOption) (*VoteResponse, error)
+	VoteChoice(ctx context.Context, in *VoteChoiceRequest, opts ...grpc.CallOption) (*VoteResponse, error)
+	HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error)
+}
+
+type votesServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewVotesServiceClient(cc grpc.ClientConnInterface) VotesServiceClient {
+	return &votesServiceClient{cc}
+}
+
+func (c *votesServiceClient) GetVotes(ctx context.Context, in *GetVotesRequest, opts ...grpc.CallOption) (*GetVotesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetVotesResponse)
+	err := c.cc.Invoke(ctx, VotesService_GetVotes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *votesServiceClient) GetRateInfo(ctx context.Context, in *GetVoteInfoRequest, opts ...grpc.CallOption) (*GetRateInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRateInfoResponse)
+	err := c.cc.Invoke(ctx, VotesService_GetRateInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *votesServiceClient) GetPetitionInfo(ctx context.Context, in *GetVoteInfoRequest, opts ...grpc.CallOption) (*GetPetitionInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPetitionInfoResponse)
+	err := c.cc.Invoke(ctx, VotesService_GetPetitionInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *votesServiceClient) GetChoiceInfo(ctx context.Context, in *GetVoteInfoRequest, opts ...grpc.CallOption) (*GetChoiceInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChoiceInfoResponse)
+	err := c.cc.Invoke(ctx, VotesService_GetChoiceInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *votesServiceClient) VoteRate(ctx context.Context, in *VoteRateRequest, opts ...grpc.CallOption) (*VoteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VoteResponse)
+	err := c.cc.Invoke(ctx, VotesService_VoteRate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *votesServiceClient) VotePetition(ctx context.Context, in *VotePetitionRequest, opts ...grpc.CallOption) (*VoteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VoteResponse)
+	err := c.cc.Invoke(ctx, VotesService_VotePetition_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *votesServiceClient) VoteChoice(ctx context.Context, in *VoteChoiceRequest, opts ...grpc.CallOption) (*VoteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VoteResponse)
+	err := c.cc.Invoke(ctx, VotesService_VoteChoice_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *votesServiceClient) HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HealthCheckResponse)
+	err := c.cc.Invoke(ctx, VotesService_HealthCheck_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// VotesServiceServer is the server API for VotesService service.
+// All implementations must embed UnimplementedVotesServiceServer
+// for forward compatibility.
+type VotesServiceServer interface {
+	GetVotes(context.Context, *GetVotesRequest) (*GetVotesResponse, error)
+	GetRateInfo(context.Context, *GetVoteInfoRequest) (*GetRateInfoResponse, error)
+	GetPetitionInfo(context.Context, *GetVoteInfoRequest) (*GetPetitionInfoResponse, error)
+	GetChoiceInfo(context.Context, *GetVoteInfoRequest) (*GetChoiceInfoResponse, error)
+	VoteRate(context.Context, *VoteRateRequest) (*VoteResponse, error)
+	VotePetition(context.Context, *VotePetitionRequest) (*VoteResponse, error)
+	VoteChoice(context.Context, *VoteChoiceRequest) (*VoteResponse, error)
+	HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error)
+	mustEmbedUnimplementedVotesServiceServer()
+}
+
+// UnimplementedVotesServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedVotesServiceServer struct{}
+
+func (UnimplementedVotesServiceServer) GetVotes(context.Context, *GetVotesRequest) (*GetVotesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVotes not implemented")
+}
+func (UnimplementedVotesServiceServer) GetRateInfo(context.Context, *GetVoteInfoRequest) (*GetRateInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRateInfo not implemented")
+}
+func (UnimplementedVotesServiceServer) GetPetitionInfo(context.Context, *GetVoteInfoRequest) (*GetPetitionInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetPetitionInfo not implemented")
+}
+func (UnimplementedVotesServiceServer) GetChoiceInfo(context.Context, *GetVoteInfoRequest) (*GetChoiceInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetChoiceInfo not implemented")
+}
+func (UnimplementedVotesServiceServer) VoteRate(context.Context, *VoteRateRequest) (*VoteResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method VoteRate not implemented")
+}
+func (UnimplementedVotesServiceServer) VotePetition(context.Context, *VotePetitionRequest) (*VoteResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method VotePetition not implemented")
+}
+func (UnimplementedVotesServiceServer) VoteChoice(context.Context, *VoteChoiceRequest) (*VoteResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method VoteChoice not implemented")
+}
+func (UnimplementedVotesServiceServer) HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HealthCheck not implemented")
+}
+func (UnimplementedVotesServiceServer) mustEmbedUnimplementedVotesServiceServer() {}
+func (UnimplementedVotesServiceServer) testEmbeddedByValue()                      {}
+
+// UnsafeVotesServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to VotesServiceServer will
+// result in compilation errors.
+type UnsafeVotesServiceServer interface {
+	mustEmbedUnimplementedVotesServiceServer()
+}
+
+func RegisterVotesServiceServer(s grpc.ServiceRegistrar, srv VotesServiceServer) {
+	// If the following call pancis, it indicates UnimplementedVotesServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&VotesService_ServiceDesc, srv)
+}
+
+func _VotesService_GetVotes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVotesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VotesServiceServer).GetVotes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VotesService_GetVotes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VotesServiceServer).GetVotes(ctx, req.(*GetVotesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VotesService_GetRateInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVoteInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VotesServiceServer).GetRateInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VotesService_GetRateInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VotesServiceServer).GetRateInfo(ctx, req.(*GetVoteInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VotesService_GetPetitionInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVoteInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VotesServiceServer).GetPetitionInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VotesService_GetPetitionInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VotesServiceServer).GetPetitionInfo(ctx, req.(*GetVoteInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VotesService_GetChoiceInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVoteInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VotesServiceServer).GetChoiceInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VotesService_GetChoiceInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VotesServiceServer).GetChoiceInfo(ctx, req.(*GetVoteInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VotesService_VoteRate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VoteRateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VotesServiceServer).VoteRate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VotesService_VoteRate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VotesServiceServer).VoteRate(ctx, req.(*VoteRateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VotesService_VotePetition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VotePetitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VotesServiceServer).VotePetition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VotesService_VotePetition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VotesServiceServer).VotePetition(ctx, req.(*VotePetitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VotesService_VoteChoice_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VoteChoiceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VotesServiceServer).VoteChoice(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VotesService_VoteChoice_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VotesServiceServer).VoteChoice(ctx, req.(*VoteChoiceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VotesService_HealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HealthCheckRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VotesServiceServer).HealthCheck(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VotesService_HealthCheck_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VotesServiceServer).HealthCheck(ctx, req.(*HealthCheckRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// VotesService_ServiceDesc is the grpc.ServiceDesc for VotesService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var VotesService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.VotesService",
+	HandlerType: (*VotesServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetVotes",
+			Handler:    _VotesService_GetVotes_Handler,
+		},
+		{
+			MethodName: "GetRateInfo",
+			Handler:    _VotesService_GetRateInfo_Handler,
+		},
+		{
+			MethodName: "GetPetitionInfo",
+			Handler:    _VotesService_GetPetitionInfo_Handler,
+		},
+		{
+			MethodName: "GetChoiceInfo",
+			Handler:    _VotesService_GetChoiceInfo_Handler,
+		},
+		{
+			MethodName: "VoteRate",
+			Handler:    _VotesService_VoteRate_Handler,
+		},
+		{
+			MethodName: "VotePetition",
+			Handler:    _VotesService_VotePetition_Handler,
+		},
+		{
+			MethodName: "VoteChoice",
+			Handler:    _VotesService_VoteChoice_Handler,
+		},
+		{
+			MethodName: "HealthCheck",
+			Handler:    _VotesService_HealthCheck_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "api/proto/kdt.proto",
+}

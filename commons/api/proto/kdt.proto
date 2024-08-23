@@ -106,6 +106,7 @@ message Collection {
   string website = 7;
   int32 goal = 8;
   int32 current = 9;
+  string photo = 10;
 }
 
 message DonateRequest {
@@ -115,6 +116,111 @@ message DonateRequest {
 }
 
 message DonateResponse {
+  string response = 1;
+}
+
+
+service VotesService {
+  rpc GetVotes(GetVotesRequest) returns (GetVotesResponse);
+  rpc GetRateInfo(GetVoteInfoRequest) returns (GetRateInfoResponse);
+  rpc GetPetitionInfo(GetVoteInfoRequest) returns (GetPetitionInfoResponse);
+  rpc GetChoiceInfo(GetVoteInfoRequest) returns (GetChoiceInfoResponse);
+
+  rpc VoteRate(VoteRateRequest) returns (VoteResponse);
+  rpc VotePetition(VotePetitionRequest) returns (VoteResponse);
+  rpc VoteChoice(VoteChoiceRequest) returns (VoteResponse);
+
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message GetVotesRequest {}
+
+message GetVotesResponse {
+  repeated Vote response = 1;
+}
+
+message Vote {
+  int32 id = 1;
+  string category = 2;
+  string name = 3;
+  string description = 4;
+  string organization = 5;
+  google.protobuf.Timestamp end = 6;
+  repeated string options = 7;
+  string photo = 8;
+}
+
+message GetVoteInfoRequest {
+  int32 vote_id = 1;
+}
+
+message GetRateInfoResponse {
+  VoteInfo response = 1;
+}
+
+message GetPetitionInfoResponse {
+  PetitionInfo response = 1;
+}
+
+message GetChoiceInfoResponse {
+  ChoiceInfo response = 1;
+}
+
+message VoteInfo {
+  int32 id = 1;
+  string category = 2;
+  string name = 3;
+  string description = 4;
+  string organization = 5;
+  google.protobuf.Timestamp end = 6;
+  repeated string options = 7;
+  string photo = 8;
+  float mid = 9;
+}
+
+message PetitionInfo {
+  int32 id = 1;
+  string category = 2;
+  string name = 3;
+  string description = 4;
+  string organization = 5;
+  google.protobuf.Timestamp end = 6;
+  repeated string options = 7;
+  string photo = 8;
+  map<string, int32> stats = 9;
+}
+
+message ChoiceInfo {
+  int32 id = 1;
+  string category = 2;
+  string name = 3;
+  string description = 4;
+  string organization = 5;
+  google.protobuf.Timestamp end = 6;
+  repeated string options = 7;
+  string photo = 8;
+  map<string, int32> stats = 9;
+}
+
+message VoteRateRequest {
+  string token = 1;
+  int32 vote_id = 2;
+  float rating = 3;
+}
+
+message VotePetitionRequest {
+  string token = 1;
+  int32 vote_id = 2;
+  string support = 3;
+}
+
+message VoteChoiceRequest {
+  string token = 1;
+  int32 vote_id = 2;
+  string choice = 3;
+}
+
+message VoteResponse {
   string response = 1;
 }
 

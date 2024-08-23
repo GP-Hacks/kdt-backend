@@ -24,6 +24,7 @@ type CollectionWithDefault struct {
 	Website      string `json:"website"`
 	Goal         int    `json:"goal"`
 	Current      int    `json:"current"`
+	Photo        string `json:"photo"`
 }
 
 func withDefaultValues(resp *proto.GetCollectionsResponse) *GetCollectionsResponseWithDefault {
@@ -39,6 +40,7 @@ func withDefaultValues(resp *proto.GetCollectionsResponse) *GetCollectionsRespon
 			Website:      collection.Website,
 			Goal:         int(collection.Goal),
 			Current:      int(collection.Current),
+			Photo:        collection.Photo,
 		}
 		def.Response = append(def.Response, collectionDef)
 	}

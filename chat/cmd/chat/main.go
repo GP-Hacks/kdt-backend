@@ -17,9 +17,9 @@ func main() {
 	log.Info("Logger loaded")
 
 	grpcServer := grpc.NewServer()
-	l, err := net.Listen("tcp", cfg.Address)
+	l, err := net.Listen("tcp", cfg.LocalAddress)
 	if err != nil {
-		log.Error("Failed to start listener for ChatService", slog.String("error", err.Error()), slog.String("address", cfg.Address))
+		log.Error("Failed to start listener for ChatService", slog.String("error", err.Error()), slog.String("address", cfg.LocalAddress))
 		return
 	}
 	defer func(l net.Listener) {
@@ -35,7 +35,7 @@ func main() {
 
 	handler.NewGRPCHandler(grpcServer, storage, log)
 	if err := grpcServer.Serve(l); err != nil {
-		log.Error("Error serving gRPC server for ChatService", slog.String("address", cfg.Address), slog.String("error", err.Error()))
+		log.Error("Error serving gRPC server for ChatService", slog.String("address", cfg.LocalAddress), slog.String("error", err.Error()))
 		return
 	}
 }

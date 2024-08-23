@@ -1,6 +1,6 @@
 module github.com/GP-Hack/kdt2024-commons
 
-go 1.22.5
+go 1.23
 
 require (
 	golang.org/x/net v0.25.0 // indirect

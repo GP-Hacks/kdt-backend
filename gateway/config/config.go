@@ -1,40 +1,38 @@
 package config
 
 import (
-	"github.com/ilyakaznacheev/cleanenv"
-	"log"
 	"os"
 	"time"
 )
 
 type Config struct {
-	Env               string        `yaml:"env" env-required:"true"`
-	Address           string        `yaml:"address" env-required:"true"`
-	ChatAddress       string        `yaml:"chat_address" env-required:"true"`
-	PlacesAddress     string        `yaml:"places_address" env-required:"true"`
-	CharityAddress    string        `yaml:"charity_address" env-required:"true"`
-	Timeout           time.Duration `yaml:"timeout" env-required:"true"`
-	IdleTimeout       time.Duration `yaml:"idle_timeout" env-required:"true"`
-	MongoDBName       string        `yaml:"mongodb_name" env-required:"true"`
-	MongoDBCollection string        `yaml:"mongodb_collection" env-required:"true"`
+	Env               string
+	LocalAddress      string
+	Address           string
+	ChatAddress       string
+	PlacesAddress     string
+	CharityAddress    string
+	VotesAddress      string
+	Timeout           time.Duration
+	IdleTimeout       time.Duration
+	MongoDBName       string
+	MongoDBCollection string
+	MongoDBPath       string
 }
 
 func MustLoad() *Config {
-	configPath := os.Getenv("CONFIG_PATH")
-	if configPath == "" {
-		// TODO: move to env
-		configPath = "gateway/config/config.yaml"
-		//log.Fatal("CONFIG_PATH environment variable is not set")
+	return &Config{
+		Env:               "local",
+		Address:           os.Getenv("SERVICE_ADDRESS"),
+		LocalAddress:      os.Getenv("LOCAL_ADDRESS"),
+		ChatAddress:       os.Getenv("CHAT_SERVICE_ADDRESS"),
+		PlacesAddress:     os.Getenv("PLACES_SERVICE_ADDRESS"),
+		CharityAddress:    os.Getenv("CHARITY_SERVICE_ADDRESS"),
+		VotesAddress:      os.Getenv("VOTES_SERVICE_ADDRESS"),
+		Timeout:           time.Second * 15,
+		IdleTimeout:       time.Second * 60,
+		MongoDBName:       os.Getenv("MONGODB_NAME"),
+		MongoDBCollection: os.Getenv("MONGODB_COLLECTION"),
+		MongoDBPath:       os.Getenv("MONGODB_PATH"),
 	}
-
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		log.Fatalf("%s: CONFIG_PATH does not exist", configPath)
-	}
-
-	var config Config
-	if err := cleanenv.ReadConfig(configPath, &config); err != nil {
-		log.Fatalf("%s: CONFIG_PATH read error: %v", configPath, err)
-	}
-
-	return &config
 }

@@ -1,3 +1,0 @@
-env: "local"
-address: "localhost:8889"
-redis_address: "localhost:2345"

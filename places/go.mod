@@ -1,6 +1,6 @@
 module github.com/GP-Hack/kdt2024-places
 
-go 1.22.5
+go 1.23
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect

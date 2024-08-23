@@ -1,7 +1,0 @@
-env: "local"
-address: "localhost:8891"
-rabbitmq_address: "amqp://guest:guest@localhost:5672/"
-queue_name: "purchase_notifications"
-mongodb_name: "UserTokens"
-mongodb_collection: "Tokens"
-firebase_cfg: "notifications/config/tatarstan-resident-card-firebase-adminsdk-kz8m0-28c7f5f101.json"

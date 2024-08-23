@@ -72,6 +72,7 @@ func (h *GRPCHandler) GetCollections(ctx context.Context, request *proto.GetColl
 			Website:      collection.Website,
 			Goal:         int32(collection.Goal),
 			Current:      int32(collection.Current),
+			Photo:        collection.Photo,
 		})
 	}
 
@@ -105,11 +106,19 @@ func (h *GRPCHandler) Donate(ctx context.Context, request *proto.DonateRequest) 
 	err := h.publishToRabbitMQ(donationMessage, h.cfg.QueueName)
 	if err != nil {
 		h.logger.Error("Failed to publish message to RabbitMQ", slog.Any("error", err.Error()))
+		return nil, status.Errorf(codes.Internal, "Please try again later")
+	}
+
+	err = h.storage.UpdateCollection(ctx, int(request.GetCollectionId()), int(request.GetAmount()))
+	if err != nil {
+		h.logger.Error("Failed to update collection", slog.Any("error", err.Error()))
+		return nil, status.Errorf(codes.Internal, "Please try again later")
 	}
 
 	return &proto.DonateResponse{
 		Response: "Successfully donated",
 	}, nil
+
 }
 
 func (h *GRPCHandler) HealthCheck(ctx context.Context, req *proto.HealthCheckRequest) (*proto.HealthCheckResponse, error) {

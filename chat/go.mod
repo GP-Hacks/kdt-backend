@@ -1,6 +1,6 @@
 module github.com/GP-Hack/kdt2024-chat
 
-go 1.22.5
+go 1.23
 
 require (
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect

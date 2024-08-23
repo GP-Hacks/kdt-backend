@@ -1,6 +1,6 @@
 module github.com/GP-Hacks/kdt2024-notifications
 
-go 1.22.5
+go 1.23
 
 require (
 	cloud.google.com/go v0.115.1 // indirect

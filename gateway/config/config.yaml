@@ -1,9 +1,0 @@
-env: "local"
-address: "localhost:8888"
-chat_address: "localhost:8889"
-places_address: "localhost:8890"
-charity_address: "localhost:8893"
-timeout: 10s
-idle_timeout: 60s
-mongodb_name: "UserTokens"
-mongodb_collection: "Tokens"

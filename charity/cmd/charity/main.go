@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"github.com/GP-Hack/kdt2024-commons/prettylogger"
 	"github.com/GP-Hacks/kdt2024-charity/config"
 	"github.com/GP-Hacks/kdt2024-charity/internal/grpc-server/handler"
@@ -20,24 +19,16 @@ func main() {
 	log.Info("Logger loaded")
 
 	grpcServer := grpc.NewServer()
-	l, err := net.Listen("tcp", cfg.Address)
+	l, err := net.Listen("tcp", cfg.LocalAddress)
 	if err != nil {
-		log.Error("Failed to start listener for CharityService", slog.String("error", err.Error()), slog.String("address", cfg.Address))
+		log.Error("Failed to start listener for CharityService", slog.String("error", err.Error()), slog.String("address", cfg.LocalAddress))
 		return
 	}
 	defer l.Close()
-	var path string
-	flag.StringVar(&path, "path", "", "postgres://username:password@host:port/dbname")
 
-	flag.Parse()
-	if path == "" {
-		log.Error("No storage_path provided")
-		return
-	}
-
-	storage, err := storage.NewPostgresStorage(path + "?sslmode=disable")
+	storage, err := storage.NewPostgresStorage(cfg.PostgresAddress + "?sslmode=disable")
 	if err != nil {
-		log.Error("Failed to connect to Postgres", slog.String("error", err.Error()), slog.String("storage_path", path))
+		log.Error("Failed to connect to Postgres", slog.String("error", err.Error()), slog.String("storage_path", cfg.PostgresAddress))
 		return
 	}
 	log.Info("Postgres connected")
@@ -53,7 +44,8 @@ func main() {
 			phone VARCHAR(50),
 			website VARCHAR(255),
 			goal INT,
-			current INT
+			current INT,
+			photo TEXT
 		)
 	`)
 	if err != nil {
@@ -65,7 +57,7 @@ func main() {
 		return
 	}
 
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	conn, err := amqp.Dial(cfg.RabbitMQAddress)
 	if err != nil {
 		log.Error("Failed to connect to RabbitMQ", slog.Any("error", err.Error()))
 		return
@@ -81,6 +73,6 @@ func main() {
 
 	handler.NewGRPCHandler(cfg, grpcServer, storage, log, ch)
 	if err := grpcServer.Serve(l); err != nil {
-		log.Error("Error serving gRPC server for CharityService", slog.String("address", cfg.Address), slog.String("error", err.Error()))
+		log.Error("Error serving gRPC server for CharityService", slog.String("address", cfg.LocalAddress), slog.String("error", err.Error()))
 	}
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"github.com/GP-Hack/kdt2024-commons/prettylogger"
 	"github.com/GP-Hacks/kdt2024-purchases/config"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,15 +32,7 @@ func main() {
 	log.Info("Configuration loaded")
 	log.Info("Logger loaded")
 
-	var path string
-	flag.StringVar(&path, "path", "", "postgres://username:password@host:port/dbname")
-	flag.Parse()
-	if path == "" {
-		log.Error("No storage_path provided")
-		return
-	}
-
-	dbpool, err := pgxpool.New(context.Background(), path+"?sslmode=disable")
+	dbpool, err := pgxpool.New(context.Background(), cfg.PostgresAddress+"?sslmode=disable")
 	if err != nil {
 		log.Error("Failed to connect to Postgres", slog.String("error", err.Error()))
 		return
@@ -52,7 +43,7 @@ func main() {
 	_, err = dbpool.Exec(context.Background(), `
 		CREATE TABLE IF NOT EXISTS ticket_purchases (
 			user_token TEXT,
-			place_id INT REFERENCES places(id) ON DELETE CASCADE,
+			place_id INT,
 			event_time TIMESTAMP,
 			purchase_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			cost INT
@@ -66,7 +57,7 @@ func main() {
 	_, err = dbpool.Exec(context.Background(), `
 		CREATE TABLE IF NOT EXISTS donations (
 			user_token TEXT,
-			collection_id INT REFERENCES charity(id) ON DELETE CASCADE,
+			collection_id INT,
 			donation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			amount INT
 		)
@@ -112,8 +103,6 @@ func main() {
 			log.Error("Failed to unmarshal message type", slog.String("error", err.Error()))
 			continue
 		}
-
-		// Проверяем, какое сообщение пришло: покупка билета или пожертвование
 		if _, ok := messageType["place_id"]; ok {
 			var dbmsg PurchaseMessage
 			if err := json.Unmarshal(msg.Body, &dbmsg); err != nil {

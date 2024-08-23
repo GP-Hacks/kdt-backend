@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	firebase "firebase.google.com/go"
 	"firebase.google.com/go/messaging"
-	"flag"
 	"github.com/GP-Hack/kdt2024-commons/prettylogger"
 	"github.com/GP-Hacks/kdt2024-notifications/config"
 	"github.com/streadway/amqp"
@@ -30,15 +29,7 @@ func main() {
 	log.Info("Configuration loaded")
 	log.Info("Logger loaded")
 
-	var path string
-	flag.StringVar(&path, "path", "", "mongoDBUri")
-	flag.Parse()
-	if path == "" {
-		log.Error("No storage_path provided")
-		return
-	}
-
-	clientOptions := options.Client().ApplyURI(path)
+	clientOptions := options.Client().ApplyURI(cfg.MongoDBPath)
 	mongoClient, err := mongo.Connect(context.Background(), clientOptions)
 	if err != nil {
 		log.Error("Failed to connect to MongoDB", slog.String("error", err.Error()))
@@ -78,7 +69,27 @@ func main() {
 	}
 	log.Info("RabbitMQ connected")
 
-	opt := option.WithCredentialsFile(cfg.FirebaseCfg)
+	creds := map[string]string{
+		"type":                        "service_account",
+		"project_id":                  cfg.FirebaseProjectId,
+		"private_key_id":              cfg.FirebasePrivateKeyId,
+		"private_key":                 cfg.FirebasePrivateKey,
+		"client_email":                cfg.FirebaseClientEmail,
+		"client_id":                   cfg.FirebaseClientId,
+		"auth_uri":                    "https://accounts.google.com/o/oauth2/auth",
+		"token_uri":                   "https://oauth2.googleapis.com/token",
+		"auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+		"client_x509_cert_url":        cfg.FirebaseClientX509CertUrl,
+		"universe_domain":             "googleapis.com",
+	}
+
+	credentialsJSON, err := json.Marshal(creds)
+	if err != nil {
+		log.Error("Failed to marshal credentials to JSON", slog.String("error", err.Error()))
+		return
+	}
+
+	opt := option.WithCredentialsJSON(credentialsJSON)
 	app, err := firebase.NewApp(context.Background(), nil, opt)
 	if err != nil {
 		log.Error("Error initializing FirebaseApp", slog.String("error", err.Error()))

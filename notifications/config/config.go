@@ -1,37 +1,41 @@
 package config
 
 import (
-	"github.com/ilyakaznacheev/cleanenv"
-	"log"
 	"os"
 )
 
 type Config struct {
-	Env               string `yaml:"env" env-required:"true"`
-	Address           string `yaml:"address" env-required:"true"`
-	RabbitMQAddress   string `yaml:"rabbitmq_address" env-required:"true"`
-	QueueName         string `yaml:"queue_name" env-required:"true"`
-	FirebaseCfg       string `yaml:"firebase_cfg" env-required:"true"`
-	MongoDBName       string `yaml:"mongodb_name" env-required:"true"`
-	MongoDBCollection string `yaml:"mongodb_collection" env-required:"true"`
+	Env                       string
+	Address                   string
+	RabbitMQAddress           string
+	QueueName                 string
+	MongoDBName               string
+	MongoDBCollection         string
+	MongoDBPath               string
+	FirebaseProjectId         string
+	FirebasePrivateKeyId      string
+	FirebasePrivateKey        string
+	FirebaseClientEmail       string
+	FirebaseClientId          string
+	FirebaseClientX509CertUrl string
+	LocalAddress              string
 }
 
 func MustLoad() *Config {
-	configPath := os.Getenv("CONFIG_PATH")
-	if configPath == "" {
-		// TODO: move to env
-		configPath = "notifications/config/config.yaml"
-		//log.Fatal("CONFIG_PATH environment variable is not set")
+	return &Config{
+		Env:                       "local",
+		Address:                   os.Getenv("SERVICE_ADDRESS"),
+		RabbitMQAddress:           os.Getenv("RABBITMQ_ADDRESS"),
+		QueueName:                 os.Getenv("QUEUE_NAME"),
+		MongoDBName:               os.Getenv("MONGODB_NAME"),
+		MongoDBCollection:         os.Getenv("MONGODB_COLLECTION"),
+		MongoDBPath:               os.Getenv("MONGODB_PATH"),
+		FirebaseProjectId:         os.Getenv("FIREBASE_PROJECT_ID"),
+		FirebasePrivateKeyId:      os.Getenv("FIREBASE_PRIVATE_KEY_ID"),
+		FirebasePrivateKey:        os.Getenv("FIREBASE_PRIVATE_KEY"),
+		FirebaseClientEmail:       os.Getenv("FIREBASE_CLIENT_EMAIL"),
+		FirebaseClientId:          os.Getenv("FIREBASE_CLIENT_ID"),
+		FirebaseClientX509CertUrl: os.Getenv("FIREBASE_CLIENT_X509_CERT_URL"),
+		LocalAddress:              os.Getenv("LOCAL_ADDRESS"),
 	}
-
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		log.Fatalf("%s: CONFIG_PATH does not exist", configPath)
-	}
-
-	var config Config
-	if err := cleanenv.ReadConfig(configPath, &config); err != nil {
-		log.Fatalf("%s: CONFIG_PATH read error: %v", configPath, err)
-	}
-
-	return &config
 }
