@@ -15,17 +15,27 @@ func NewDonateHandler(log *slog.Logger, charityClient proto.CharityServiceClient
 		const op = "handler.charity.donate.New"
 		ctx := r.Context()
 		reqID := middleware.GetReqID(ctx)
-		logger := log.With(slog.String("op", op), slog.Any("request_id", reqID), slog.Any("ip", r.RemoteAddr))
+		logger := log.With(
+			slog.String("operation", op),
+			slog.String("request_id", reqID),
+			slog.String("client_ip", r.RemoteAddr),
+			slog.String("method", r.Method),
+			slog.String("url", r.URL.String()),
+		)
+
+		logger.Info("Processing donation request")
 
 		select {
 		case <-ctx.Done():
-			logger.Warn("Request cancelled by the client")
+			logger.Warn("Request was cancelled by the client")
+			http.Error(w, "Request was cancelled", http.StatusRequestTimeout)
 			return
 		default:
 		}
 
 		token := r.Header.Get("Authorization")
 		if token == "" {
+			logger.Warn("Authorization header missing")
 			json.WriteError(w, http.StatusUnauthorized, "Authorization required")
 			return
 		}
@@ -36,19 +46,19 @@ func NewDonateHandler(log *slog.Logger, charityClient proto.CharityServiceClient
 		}
 
 		if err := json.ReadJSON(r, &request); err != nil {
-			logger.Error("Failed to read JSON", slog.String("error", err.Error()))
+			logger.Error("Failed to parse JSON request", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusBadRequest, "Invalid JSON input")
 			return
 		}
 
-		if request.CollectionId == 0 {
-			logger.Warn("Invalid collection_id field")
+		if request.CollectionId <= 0 {
+			logger.Warn("Invalid collection_id field", slog.Int("collection_id", request.CollectionId))
 			json.WriteError(w, http.StatusBadRequest, "Invalid collection_id field")
 			return
 		}
 
 		if request.Amount <= 0 {
-			logger.Warn("Invalid amount field")
+			logger.Warn("Invalid amount field", slog.Int("amount", request.Amount))
 			json.WriteError(w, http.StatusBadRequest, "Invalid amount field")
 			return
 		}
@@ -62,16 +72,16 @@ func NewDonateHandler(log *slog.Logger, charityClient proto.CharityServiceClient
 		resp, err := charityClient.Donate(ctx, protoRequest)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
+				logger.Warn("Collection not found for donation", slog.Int("collection_id", request.CollectionId))
 				json.WriteError(w, http.StatusNotFound, "Collection not found")
-				logger.Warn("Collection not found", slog.Int("id", int(protoRequest.GetCollectionId())))
 				return
 			}
+			logger.Error("Failed to process donation", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusInternalServerError, "Could not save your donation")
-			logger.Error("Failed to save donation", slog.String("error", err.Error()))
 			return
 		}
 
+		logger.Info("Donation processed successfully", slog.Any("response", resp))
 		json.WriteJSON(w, http.StatusOK, resp)
-		logger.Debug("Donation sent successfully", slog.Any("response", resp))
 	}
 }

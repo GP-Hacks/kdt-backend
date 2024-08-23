@@ -17,17 +17,27 @@ func NewBuyTicketHandler(log *slog.Logger, placesClient proto.PlacesServiceClien
 		const op = "handler.places.buy.New"
 		ctx := r.Context()
 		reqID := middleware.GetReqID(ctx)
-		logger := log.With(slog.String("op", op), slog.Any("request_id", reqID), slog.Any("ip", r.RemoteAddr))
+		logger := log.With(
+			slog.String("operation", op),
+			slog.String("request_id", reqID),
+			slog.String("client_ip", r.RemoteAddr),
+			slog.String("method", r.Method),
+			slog.String("url", r.URL.String()),
+		)
+
+		logger.Info("Processing buy ticket request")
 
 		select {
 		case <-ctx.Done():
-			logger.Warn("Request cancelled by the client")
+			logger.Warn("Request was cancelled by the client", slog.String("reason", ctx.Err().Error()))
+			http.Error(w, "Request was cancelled", http.StatusRequestTimeout)
 			return
 		default:
 		}
 
 		token := r.Header.Get("Authorization")
 		if token == "" {
+			logger.Warn("Authorization header is missing or empty")
 			json.WriteError(w, http.StatusUnauthorized, "Authorization required")
 			return
 		}
@@ -36,15 +46,14 @@ func NewBuyTicketHandler(log *slog.Logger, placesClient proto.PlacesServiceClien
 			PlaceId   int       `json:"place_id"`
 			Timestamp time.Time `json:"timestamp"`
 		}
-
 		if err := json.ReadJSON(r, &request); err != nil {
-			logger.Error("Failed to read JSON", slog.String("error", err.Error()))
+			logger.Error("Failed to parse JSON input", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusBadRequest, "Invalid JSON input")
 			return
 		}
 
-		if request.PlaceId == 0 {
-			logger.Warn("Invalid place_id field")
+		if request.PlaceId <= 0 {
+			logger.Warn("Invalid place_id field", slog.Int("place_id", request.PlaceId))
 			json.WriteError(w, http.StatusBadRequest, "Invalid place_id field")
 			return
 		}
@@ -64,16 +73,16 @@ func NewBuyTicketHandler(log *slog.Logger, placesClient proto.PlacesServiceClien
 		resp, err := placesClient.BuyTicket(ctx, protoRequest)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
+				logger.Warn("Place not found", slog.Int("place_id", int(protoRequest.GetPlaceId())))
 				json.WriteError(w, http.StatusNotFound, "Place not found")
-				logger.Warn("Place not found", slog.Int("id", int(protoRequest.GetPlaceId())))
 				return
 			}
+			logger.Error("Failed to process buy ticket request", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusInternalServerError, "Could not save your order")
-			logger.Error("Failed to save order", slog.String("error", err.Error()))
 			return
 		}
 
 		json.WriteJSON(w, http.StatusOK, resp)
-		logger.Debug("Ticket bought successfully", slog.Any("response", resp))
+		logger.Debug("Ticket successfully bought", slog.Any("response", resp))
 	}
 }

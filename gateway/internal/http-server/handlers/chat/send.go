@@ -10,7 +10,7 @@ import (
 
 func validateAuthorization(user string) (int, string) {
 	if user == "" {
-		return http.StatusUnauthorized, "Authorization required"
+		return http.StatusUnauthorized, "Authorization token is required"
 	}
 	return http.StatusOK, ""
 }
@@ -18,15 +18,15 @@ func validateAuthorization(user string) (int, string) {
 func validateSendMessageRequest(request *proto.SendMessageRequest) (int, string) {
 	messages := request.GetMessages()
 	if len(messages) != 1 {
-		return http.StatusBadRequest, "Invalid messages count"
+		return http.StatusBadRequest, "Request should contain exactly one message"
 	}
 
 	message := messages[0]
 	if message.GetContent() == "" {
-		return http.StatusBadRequest, "Invalid message content"
+		return http.StatusBadRequest, "Message content cannot be empty"
 	}
 	if message.GetRole() != "user" {
-		return http.StatusBadRequest, "Invalid message role"
+		return http.StatusBadRequest, "Message role must be 'user'"
 	}
 
 	return http.StatusOK, ""
@@ -37,11 +37,20 @@ func NewSendMessageHandler(log *slog.Logger, chatClient proto.ChatServiceClient)
 		const op = "handler.chat.send.New"
 		ctx := r.Context()
 		reqID := middleware.GetReqID(ctx)
-		logger := log.With(slog.String("op", op), slog.Any("request_id", reqID), slog.Any("ip", r.RemoteAddr))
+		logger := log.With(
+			slog.String("operation", op),
+			slog.String("request_id", reqID),
+			slog.String("client_ip", r.RemoteAddr),
+			slog.String("method", r.Method),
+			slog.String("url", r.URL.String()),
+		)
+
+		logger.Info("Handling request to send message")
 
 		select {
 		case <-ctx.Done():
-			logger.Warn("Request cancelled by the client")
+			logger.Warn("Request was cancelled by the client")
+			http.Error(w, "Request was cancelled", http.StatusRequestTimeout)
 			return
 		default:
 		}
@@ -49,20 +58,21 @@ func NewSendMessageHandler(log *slog.Logger, chatClient proto.ChatServiceClient)
 		user := r.Header.Get("Authorization")
 		statusCode, message := validateAuthorization(user)
 		if statusCode != http.StatusOK {
+			logger.Warn("Authorization validation failed", slog.String("message", message))
 			json.WriteError(w, statusCode, message)
 			return
 		}
 
 		var request proto.SendMessageRequest
 		if err := json.ReadJSON(r, &request); err != nil {
-			logger.Error("Failed to read JSON", slog.String("error", err.Error()))
+			logger.Error("Failed to parse JSON input", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusBadRequest, "Invalid JSON input")
 			return
 		}
 
 		statusCode, message = validateSendMessageRequest(&request)
 		if statusCode != http.StatusOK {
-			logger.Warn(message)
+			logger.Warn("SendMessageRequest validation failed", slog.String("message", message))
 			json.WriteError(w, statusCode, message)
 			return
 		}
@@ -74,7 +84,7 @@ func NewSendMessageHandler(log *slog.Logger, chatClient proto.ChatServiceClient)
 			return
 		}
 
-		json.WriteJSON(w, http.StatusOK, resp)
 		logger.Debug("Message sent successfully", slog.Any("response", resp))
+		json.WriteJSON(w, http.StatusOK, resp)
 	}
 }

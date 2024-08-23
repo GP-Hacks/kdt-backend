@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
+
 	"github.com/GP-Hack/kdt2024-commons/api/proto"
 	"github.com/GP-Hacks/kdt2024-charity/config"
 	"github.com/GP-Hacks/kdt2024-charity/internal/storage"
@@ -13,7 +15,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"log/slog"
-	"time"
 )
 
 type DonationMessage struct {
@@ -38,12 +39,12 @@ func NewGRPCHandler(cfg *config.Config, server *grpc.Server, storage *storage.Po
 }
 
 func (h *GRPCHandler) GetCollections(ctx context.Context, request *proto.GetCollectionsRequest) (*proto.GetCollectionsResponse, error) {
-	h.logger.Debug("Processing GetCollections")
+	h.logger.Debug("Processing GetCollections request", slog.String("category", request.GetCategory()))
 
 	select {
 	case <-ctx.Done():
-		h.logger.Warn("Request was cancelled")
-		return nil, ctx.Err()
+		h.logger.Warn("GetCollections request was cancelled by client")
+		return nil, status.Errorf(codes.Canceled, "Request was cancelled")
 	default:
 	}
 
@@ -52,13 +53,18 @@ func (h *GRPCHandler) GetCollections(ctx context.Context, request *proto.GetColl
 
 	category := request.GetCategory()
 	if category == "all" {
+		h.logger.Info("Fetching all collections from database")
 		collections, err = h.storage.GetCollections(ctx)
 	} else {
+		h.logger.Info("Fetching collections by category", slog.String("category", category))
 		collections, err = h.storage.GetCollectionsByCategory(ctx, category)
 	}
+
 	if err != nil {
-		return nil, h.handleStorageError(err, "places")
+		return nil, h.handleStorageError(err, "collections")
 	}
+
+	h.logger.Info("Successfully fetched collections", slog.Int("count", len(collections)))
 
 	var responseCollections []*proto.Collection
 	for _, collection := range collections {
@@ -80,55 +86,71 @@ func (h *GRPCHandler) GetCollections(ctx context.Context, request *proto.GetColl
 }
 
 func (h *GRPCHandler) GetCategories(ctx context.Context, request *proto.GetCategoriesRequest) (*proto.GetCategoriesResponse, error) {
-	h.logger.Debug("Processing GetCategories")
+	h.logger.Debug("Processing GetCategories request")
+
+	select {
+	case <-ctx.Done():
+		h.logger.Warn("GetCategories request was cancelled by client")
+		return nil, status.Errorf(codes.Canceled, "Request was cancelled")
+	default:
+	}
+
+	h.logger.Info("Fetching categories from database")
 	categories, err := h.storage.GetCategories(ctx)
 	if err != nil {
 		return nil, h.handleStorageError(err, "categories")
 	}
 
+	h.logger.Info("Successfully fetched categories", slog.Int("count", len(categories)))
+
 	return &proto.GetCategoriesResponse{Categories: categories}, nil
 }
 
 func (h *GRPCHandler) Donate(ctx context.Context, request *proto.DonateRequest) (*proto.DonateResponse, error) {
-	h.logger.Debug("Processing Donate")
+	h.logger.Debug("Processing Donate request", slog.String("user_token", request.GetToken()), slog.Int("collection_id", int(request.GetCollectionId())), slog.Int("amount", int(request.GetAmount())))
+
 	select {
 	case <-ctx.Done():
-		h.logger.Warn("Request was cancelled")
-		return nil, ctx.Err()
+		h.logger.Warn("Donate request was cancelled by client")
+		return nil, status.Errorf(codes.Canceled, "Request was cancelled")
 	default:
 	}
+
 	donationMessage := DonationMessage{
 		UserToken:    request.GetToken(),
 		CollectionID: int(request.GetCollectionId()),
 		DonationTime: time.Now(),
 		Amount:       int(request.GetAmount()),
 	}
-	err := h.publishToRabbitMQ(donationMessage, h.cfg.QueueName)
-	if err != nil {
-		h.logger.Error("Failed to publish message to RabbitMQ", slog.Any("error", err.Error()))
-		return nil, status.Errorf(codes.Internal, "Please try again later")
+
+	h.logger.Info("Publishing donation to RabbitMQ", slog.String("queue_name", h.cfg.QueueName))
+	if err := h.publishToRabbitMQ(donationMessage, h.cfg.QueueName); err != nil {
+		h.logger.Error("Failed to publish donation to RabbitMQ", slog.Any("error", err.Error()))
+		return nil, status.Errorf(codes.Internal, "Failed to process donation, please try again later")
 	}
 
-	err = h.storage.UpdateCollection(ctx, int(request.GetCollectionId()), int(request.GetAmount()))
-	if err != nil {
-		h.logger.Error("Failed to update collection", slog.Any("error", err.Error()))
-		return nil, status.Errorf(codes.Internal, "Please try again later")
+	h.logger.Info("Updating collection in database", slog.Int("collection_id", donationMessage.CollectionID), slog.Int("amount", donationMessage.Amount))
+	if err := h.storage.UpdateCollection(ctx, donationMessage.CollectionID, donationMessage.Amount); err != nil {
+		h.logger.Error("Failed to update collection in database", slog.Any("error", err.Error()))
+		return nil, status.Errorf(codes.Internal, "Failed to process donation, please try again later")
 	}
+
+	h.logger.Info("Donation processed successfully", slog.String("user_token", donationMessage.UserToken), slog.Int("collection_id", donationMessage.CollectionID), slog.Int("amount", donationMessage.Amount))
 
 	return &proto.DonateResponse{
-		Response: "Successfully donated",
+		Response: "Thank you for your donation!",
 	}, nil
-
 }
 
 func (h *GRPCHandler) HealthCheck(ctx context.Context, req *proto.HealthCheckRequest) (*proto.HealthCheckResponse, error) {
-	h.logger.Debug("Processing HealthCheck")
+	h.logger.Debug("Processing HealthCheck request")
 	return &proto.HealthCheckResponse{
 		IsHealthy: true,
 	}, nil
 }
 
 func (h *GRPCHandler) publishToRabbitMQ(message interface{}, queueName string) error {
+	h.logger.Debug("Declaring RabbitMQ queue", slog.String("queue_name", queueName))
 	q, err := h.mqch.QueueDeclare(
 		queueName,
 		true,
@@ -138,35 +160,42 @@ func (h *GRPCHandler) publishToRabbitMQ(message interface{}, queueName string) e
 		nil,
 	)
 	if err != nil {
-		h.logger.Error("Failed to declare a queue", slog.Any("error", err.Error()))
+		h.logger.Error("Failed to declare RabbitMQ queue", slog.String("queue_name", queueName), slog.Any("error", err.Error()))
 		return err
 	}
+
+	h.logger.Debug("Marshalling message to JSON")
 	body, err := json.Marshal(message)
 	if err != nil {
 		h.logger.Error("Failed to marshal message to JSON", slog.Any("error", err.Error()))
 		return err
 	}
+
+	h.logger.Debug("Publishing message to RabbitMQ", slog.String("queue_name", q.Name))
 	err = h.mqch.Publish(
 		"",
 		q.Name,
 		false,
 		false,
 		amqp.Publishing{
-			ContentType: "text/plain",
+			ContentType: "application/json",
 			Body:        body,
-		})
+		},
+	)
 	if err != nil {
-		h.logger.Error("Failed to publish a message", slog.Any("error", err.Error()))
+		h.logger.Error("Failed to publish message to RabbitMQ", slog.String("queue_name", q.Name), slog.Any("error", err.Error()))
 		return err
 	}
+
+	h.logger.Info("Message published to RabbitMQ successfully", slog.String("queue_name", q.Name))
 	return nil
 }
 
 func (h *GRPCHandler) handleStorageError(err error, entity string) error {
 	if errors.Is(err, pgx.ErrNoRows) {
-		h.logger.Error("No "+entity+" in DB", slog.Any("error", err.Error()))
-		return status.Errorf(codes.NotFound, "No such "+entity+" in database")
+		h.logger.Warn("No records found in database", slog.String("entity", entity), slog.Any("error", err.Error()))
+		return status.Errorf(codes.NotFound, "No %s found in database", entity)
 	}
-	h.logger.Error("Failed to get "+entity, slog.Any("error", err.Error()))
-	return status.Errorf(codes.Internal, "Please try again later")
+	h.logger.Error("Database operation failed", slog.String("entity", entity), slog.Any("error", err.Error()))
+	return status.Errorf(codes.Internal, "Internal server error, please try again later")
 }

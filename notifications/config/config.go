@@ -18,7 +18,6 @@ type Config struct {
 	FirebaseClientEmail       string
 	FirebaseClientId          string
 	FirebaseClientX509CertUrl string
-	LocalAddress              string
 }
 
 func MustLoad() *Config {
@@ -36,6 +35,5 @@ func MustLoad() *Config {
 		FirebaseClientEmail:       os.Getenv("FIREBASE_CLIENT_EMAIL"),
 		FirebaseClientId:          os.Getenv("FIREBASE_CLIENT_ID"),
 		FirebaseClientX509CertUrl: os.Getenv("FIREBASE_CLIENT_X509_CERT_URL"),
-		LocalAddress:              os.Getenv("LOCAL_ADDRESS"),
 	}
 }

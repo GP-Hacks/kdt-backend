@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/GP-Hack/kdt2024-commons/prettylogger"
 	"github.com/GP-Hacks/kdt2024-purchases/config"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,56 +31,45 @@ func main() {
 	cfg := config.MustLoad()
 	log := prettylogger.SetupLogger(cfg.Env)
 	log.Info("Configuration loaded")
-	log.Info("Logger loaded")
+	log.Info("Logger initialized")
 
 	dbpool, err := pgxpool.New(context.Background(), cfg.PostgresAddress+"?sslmode=disable")
 	if err != nil {
-		log.Error("Failed to connect to Postgres", slog.String("error", err.Error()))
+		log.Error("Postgres connection error", slog.String("error", err.Error()))
 		return
 	}
-	defer dbpool.Close()
-	log.Info("PostgreSQL connected")
+	log.Info("Postgres connected")
 
-	_, err = dbpool.Exec(context.Background(), `
-		CREATE TABLE IF NOT EXISTS ticket_purchases (
-			user_token TEXT,
-			place_id INT,
-			event_time TIMESTAMP,
-			purchase_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			cost INT
-		)
-	`)
-	if err != nil {
-		log.Error("Failed to create table", slog.String("error", err.Error()))
-		return
-	}
-
-	_, err = dbpool.Exec(context.Background(), `
-		CREATE TABLE IF NOT EXISTS donations (
-			user_token TEXT,
-			collection_id INT,
-			donation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			amount INT
-		)
-	`)
-	if err != nil {
-		log.Error("Failed to create table for donations", slog.String("error", err.Error()))
+	if err := createTables(context.Background(), dbpool, log); err != nil {
+		log.Error("Failed to create necessary tables", slog.String("error", err.Error()))
 		return
 	}
 
 	conn, err := amqp.Dial(cfg.RabbitMQAddress)
 	if err != nil {
-		log.Error("Failed to connect to RabbitMQ", slog.String("error", err.Error()))
+		log.Error("RabbitMQ connection error", slog.String("error", err.Error()))
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Error("Error closing RabbitMQ connection", slog.String("error", err.Error()))
+		} else {
+			log.Info("RabbitMQ connection closed")
+		}
+	}()
 
 	ch, err := conn.Channel()
 	if err != nil {
-		log.Error("Failed to open a channel", slog.String("error", err.Error()))
+		log.Error("Failed to open RabbitMQ channel", slog.String("error", err.Error()))
 		return
 	}
-	defer ch.Close()
+	defer func() {
+		if err := ch.Close(); err != nil {
+			log.Error("Error closing RabbitMQ channel", slog.String("error", err.Error()))
+		} else {
+			log.Info("RabbitMQ channel closed")
+		}
+	}()
 
 	msgs, err := ch.Consume(
 		cfg.QueueName,
@@ -91,56 +81,95 @@ func main() {
 		nil,
 	)
 	if err != nil {
-		log.Error("Failed to register a consumer", slog.String("error", err.Error()))
+		log.Error("Failed to register RabbitMQ consumer", slog.String("error", err.Error()))
 		return
 	}
 
-	log.Info("RabbitMQ connected")
+	log.Info("RabbitMQ connected and consuming messages")
 
 	for msg := range msgs {
-		var messageType map[string]interface{}
-		if err := json.Unmarshal(msg.Body, &messageType); err != nil {
-			log.Error("Failed to unmarshal message type", slog.String("error", err.Error()))
-			continue
-		}
-		if _, ok := messageType["place_id"]; ok {
-			var dbmsg PurchaseMessage
-			if err := json.Unmarshal(msg.Body, &dbmsg); err != nil {
-				log.Error("Failed to unmarshal purchase message", slog.String("error", err.Error()))
-				continue
-			}
-
-			if dbmsg.UserToken == "" || dbmsg.PlaceID == 0 || dbmsg.EventTime.IsZero() || dbmsg.Cost == 0 {
-				log.Warn("Invalid purchase message")
-				continue
-			}
-
-			_, err := dbpool.Exec(context.Background(), `INSERT INTO ticket_purchases(user_token, place_id, event_time, purchase_time, cost) VALUES ($1, $2, $3, $4, $5)`, dbmsg.UserToken, dbmsg.PlaceID, dbmsg.EventTime, dbmsg.PurchaseTime, dbmsg.Cost)
-			if err != nil {
-				log.Error("Failed to save purchase to Postgres", slog.String("error", err.Error()))
-				continue
-			}
-			log.Debug("Saved ticket purchase")
-		} else if _, ok := messageType["collection_id"]; ok {
-			var dbmsg DonationMessage
-			if err := json.Unmarshal(msg.Body, &dbmsg); err != nil {
-				log.Error("Failed to unmarshal donation message", slog.String("error", err.Error()))
-				continue
-			}
-
-			if dbmsg.UserToken == "" || dbmsg.CollectionID == 0 || dbmsg.Amount == 0 {
-				log.Warn("Invalid donation message")
-				continue
-			}
-
-			_, err := dbpool.Exec(context.Background(), `INSERT INTO donations(user_token, collection_id, donation_time, amount) VALUES ($1, $2, $3, $4)`, dbmsg.UserToken, dbmsg.CollectionID, dbmsg.DonationTime, dbmsg.Amount)
-			if err != nil {
-				log.Error("Failed to save donation to Postgres", slog.String("error", err.Error()))
-				continue
-			}
-			log.Debug("Saved donation")
-		} else {
-			log.Warn("Unknown message type")
+		if err := processMessage(context.Background(), msg, dbpool, log); err != nil {
+			log.Error("Message processing error", slog.String("error", err.Error()))
 		}
 	}
+}
+
+func createTables(ctx context.Context, dbpool *pgxpool.Pool, log *slog.Logger) error {
+	const createTablesQuery = `
+		CREATE TABLE IF NOT EXISTS ticket_purchases (
+			user_token TEXT,
+			place_id INT,
+			event_time TIMESTAMP,
+			purchase_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			cost INT
+		);
+		CREATE TABLE IF NOT EXISTS donations (
+			user_token TEXT,
+			collection_id INT,
+			donation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			amount INT
+		);
+	`
+	_, err := dbpool.Exec(ctx, createTablesQuery)
+	if err != nil {
+		return fmt.Errorf("failed to create tables: %w", err)
+	}
+	log.Info("Tables created or already exist")
+	return nil
+}
+
+func processMessage(ctx context.Context, msg amqp.Delivery, dbpool *pgxpool.Pool, log *slog.Logger) error {
+	var messageType map[string]interface{}
+	if err := json.Unmarshal(msg.Body, &messageType); err != nil {
+		return fmt.Errorf("failed to unmarshal message body: %w", err)
+	}
+
+	if _, ok := messageType["place_id"]; ok {
+		return processPurchaseMessage(ctx, msg.Body, dbpool, log)
+	} else if _, ok := messageType["collection_id"]; ok {
+		return processDonationMessage(ctx, msg.Body, dbpool, log)
+	} else {
+		log.Warn("Received message with unknown type", slog.String("body", string(msg.Body)))
+		return nil
+	}
+}
+
+func processPurchaseMessage(ctx context.Context, body []byte, dbpool *pgxpool.Pool, log *slog.Logger) error {
+	var dbmsg PurchaseMessage
+	if err := json.Unmarshal(body, &dbmsg); err != nil {
+		return fmt.Errorf("failed to unmarshal purchase message: %w", err)
+	}
+
+	if dbmsg.UserToken == "" || dbmsg.PlaceID == 0 || dbmsg.EventTime.IsZero() || dbmsg.Cost == 0 {
+		log.Warn("Received invalid purchase message", slog.Any("message", dbmsg))
+		return nil
+	}
+
+	_, err := dbpool.Exec(ctx, `INSERT INTO ticket_purchases(user_token, place_id, event_time, purchase_time, cost) VALUES ($1, $2, $3, $4, $5)`,
+		dbmsg.UserToken, dbmsg.PlaceID, dbmsg.EventTime, dbmsg.PurchaseTime, dbmsg.Cost)
+	if err != nil {
+		return fmt.Errorf("failed to insert purchase message into Postgres: %w", err)
+	}
+	log.Info("Saved ticket purchase", slog.Any("purchase_message", dbmsg))
+	return nil
+}
+
+func processDonationMessage(ctx context.Context, body []byte, dbpool *pgxpool.Pool, log *slog.Logger) error {
+	var dbmsg DonationMessage
+	if err := json.Unmarshal(body, &dbmsg); err != nil {
+		return fmt.Errorf("failed to unmarshal donation message: %w", err)
+	}
+
+	if dbmsg.UserToken == "" || dbmsg.CollectionID == 0 || dbmsg.Amount == 0 {
+		log.Warn("Received invalid donation message", slog.Any("message", dbmsg))
+		return nil
+	}
+
+	_, err := dbpool.Exec(ctx, `INSERT INTO donations(user_token, collection_id, donation_time, amount) VALUES ($1, $2, $3, $4)`,
+		dbmsg.UserToken, dbmsg.CollectionID, dbmsg.DonationTime, dbmsg.Amount)
+	if err != nil {
+		return fmt.Errorf("failed to insert donation message into Postgres: %w", err)
+	}
+	log.Info("Saved donation", slog.Any("donation_message", dbmsg))
+	return nil
 }

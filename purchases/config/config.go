@@ -10,7 +10,6 @@ type Config struct {
 	RabbitMQAddress string
 	QueueName       string
 	PostgresAddress string
-	LocalAddress    string
 }
 
 func MustLoad() *Config {
@@ -20,6 +19,5 @@ func MustLoad() *Config {
 		RabbitMQAddress: os.Getenv("RABBITMQ_ADDRESS"),
 		QueueName:       os.Getenv("QUEUE_NAME"),
 		PostgresAddress: os.Getenv("POSTGRES_ADDRESS"),
-		LocalAddress:    os.Getenv("LOCAL_ADDRESS"),
 	}
 }

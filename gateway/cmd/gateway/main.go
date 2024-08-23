@@ -1,6 +1,10 @@
 package main
 
 import (
+	"log/slog"
+	"net/http"
+	"os"
+
 	"github.com/GP-Hack/kdt2024-commons/api/proto"
 	"github.com/GP-Hack/kdt2024-commons/prettylogger"
 	"github.com/GP-Hack/kdt2024-gateway/config"
@@ -16,57 +20,99 @@ import (
 	"github.com/GP-Hack/kdt2024-gateway/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"log/slog"
-	"net/http"
-	"os"
 )
 
 func main() {
 	cfg := config.MustLoad()
 	log := prettylogger.SetupLogger(cfg.Env)
-	log.Info("Configuration loaded")
-	log.Info("Logger loaded")
 
-	err := storage.Connect(cfg.MongoDBPath, cfg.MongoDBName, cfg.MongoDBCollection)
-	if err != nil {
-		log.Error("Error connecting to MongoDB", slog.String("error", err.Error()))
+	log.Info("Configuration loaded", slog.String("environment", cfg.Env))
+	log.Info("Logger initialized", slog.String("level", cfg.Env))
+
+	if err := connectToMongoDB(cfg, log); err != nil {
+		log.Error("Failed to connect to MongoDB", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	log.Info("Connected to MongoDB")
 
-	chatClient, err := chatclient.SetupChatClient(cfg.ChatAddress)
+	chatClient, err := setupChatClient(cfg, log)
 	if err != nil {
-		log.Error("Error setting up ChatClient", slog.String("address", cfg.ChatAddress), slog.String("error", err.Error()))
+		log.Error("Failed to setup ChatClient", slog.String("address", cfg.ChatAddress), slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	log.Info("Connected to ChatService", slog.String("address", cfg.ChatAddress))
 
-	placesClient, err := placesclient.SetupPlacesClient(cfg.PlacesAddress)
+	placesClient, err := setupPlacesClient(cfg, log)
 	if err != nil {
-		log.Error("Error setting up PlacesClient", slog.String("address", cfg.PlacesAddress), slog.String("error", err.Error()))
+		log.Error("Failed to setup PlacesClient", slog.String("address", cfg.PlacesAddress), slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	log.Info("Connected to PlacesService", slog.String("address", cfg.PlacesAddress))
 
-	charityClient, err := charityclient.SetupCharityClient(cfg.CharityAddress)
+	charityClient, err := setupCharityClient(cfg, log)
 	if err != nil {
-		log.Error("Error setting up CharityClient", slog.String("address", cfg.CharityAddress), slog.String("error", err.Error()))
+		log.Error("Failed to setup CharityClient", slog.String("address", cfg.CharityAddress), slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	log.Info("Connected to CharityService", slog.String("address", cfg.CharityAddress))
 
-	votesClient, err := votesclient.SetupVotesClient(cfg.VotesAddress)
+	votesClient, err := setupVotesClient(cfg, log)
 	if err != nil {
-		log.Error("Error setting up VotesClient", slog.String("address", cfg.VotesAddress), slog.String("error", err.Error()))
+		log.Error("Failed to setup VotesClient", slog.String("address", cfg.VotesAddress), slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	log.Info("Connected to VotesService", slog.String("address", cfg.VotesAddress))
 
 	router := setupRouter(log, chatClient, placesClient, charityClient, votesClient)
 	startServer(cfg, router, log)
 }
 
-func setupRouter(log *slog.Logger, chatClient proto.ChatServiceClient, placesClient proto.PlacesServiceClient, charityClient proto.CharityServiceClient, votesclient proto.VotesServiceClient) *chi.Mux {
+func connectToMongoDB(cfg *config.Config, log *slog.Logger) error {
+	log.Debug("Connecting to MongoDB", slog.String("path", cfg.MongoDBPath), slog.String("name", cfg.MongoDBName), slog.String("collection", cfg.MongoDBCollection))
+	err := storage.Connect(cfg.MongoDBPath, cfg.MongoDBName, cfg.MongoDBCollection)
+	if err != nil {
+		return err
+	}
+	log.Info("Connected to MongoDB", slog.String("path", cfg.MongoDBPath))
+	return nil
+}
+
+func setupChatClient(cfg *config.Config, log *slog.Logger) (proto.ChatServiceClient, error) {
+	log.Debug("Setting up ChatClient", slog.String("address", cfg.ChatAddress))
+	client, err := chatclient.SetupChatClient(cfg.ChatAddress, log)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("ChatClient setup successfully", slog.String("address", cfg.ChatAddress))
+	return client, nil
+}
+
+func setupPlacesClient(cfg *config.Config, log *slog.Logger) (proto.PlacesServiceClient, error) {
+	log.Debug("Setting up PlacesClient", slog.String("address", cfg.PlacesAddress))
+	client, err := placesclient.SetupPlacesClient(cfg.PlacesAddress, log)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("PlacesClient setup successfully", slog.String("address", cfg.PlacesAddress))
+	return client, nil
+}
+
+func setupCharityClient(cfg *config.Config, log *slog.Logger) (proto.CharityServiceClient, error) {
+	log.Debug("Setting up CharityClient", slog.String("address", cfg.CharityAddress))
+	client, err := charityclient.SetupCharityClient(cfg.CharityAddress, log)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("CharityClient setup successfully", slog.String("address", cfg.CharityAddress))
+	return client, nil
+}
+
+func setupVotesClient(cfg *config.Config, log *slog.Logger) (proto.VotesServiceClient, error) {
+	log.Debug("Setting up VotesClient", slog.String("address", cfg.VotesAddress))
+	client, err := votesclient.SetupVotesClient(cfg.VotesAddress, log)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("VotesClient setup successfully", slog.String("address", cfg.VotesAddress))
+	return client, nil
+}
+
+func setupRouter(log *slog.Logger, chatClient proto.ChatServiceClient, placesClient proto.PlacesServiceClient, charityClient proto.CharityServiceClient, votesClient proto.VotesServiceClient) *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
@@ -74,7 +120,6 @@ func setupRouter(log *slog.Logger, chatClient proto.ChatServiceClient, placesCli
 	router.Use(middleware.URLFormat)
 
 	router.Post("/api/chat/ask", chat.NewSendMessageHandler(log, chatClient))
-
 	router.Post("/api/places/get", places.NewGetPlacesHandler(log, placesClient))
 	router.Post("/api/places/buy", places.NewBuyTicketHandler(log, placesClient))
 	router.Get("/api/places/categories", places.NewGetCategoriesHandler(log, placesClient))
@@ -85,13 +130,13 @@ func setupRouter(log *slog.Logger, chatClient proto.ChatServiceClient, placesCli
 
 	router.Post("/api/user/token", tokens.NewAddTokenHandler(log))
 
-	router.Get("/api/votes", votes.NewGetVotesHandler(log, votesclient))
-	router.Post("/api/votes/get", votes.NewGetVoteInfoHandler(log, votesclient))
-	router.Post("/api/votes/rate", votes.NewVoteRateHandler(log, votesclient))
-	router.Post("/api/votes/petition", votes.NewVotePetitionHandler(log, votesclient))
-	router.Post("/api/votes/choice", votes.NewVoteChoiceHandler(log, votesclient))
+	router.Get("/api/votes", votes.NewGetVotesHandler(log, votesClient))
+	router.Post("/api/votes/get", votes.NewGetVoteInfoHandler(log, votesClient))
+	router.Post("/api/votes/rate", votes.NewVoteRateHandler(log, votesClient))
+	router.Post("/api/votes/petition", votes.NewVotePetitionHandler(log, votesClient))
+	router.Post("/api/votes/choice", votes.NewVoteChoiceHandler(log, votesClient))
 
-	log.Info("Router successfully created")
+	log.Info("Router successfully created with defined routes")
 	return router
 }
 
@@ -103,9 +148,12 @@ func startServer(cfg *config.Config, router *chi.Mux, log *slog.Logger) {
 		ReadTimeout:  cfg.Timeout,
 		IdleTimeout:  cfg.IdleTimeout,
 	}
-	log.Info("Starting server", slog.String("address", cfg.LocalAddress))
+
+	log.Info("Starting HTTP server", slog.String("address", cfg.LocalAddress))
 	if err := srv.ListenAndServe(); err != nil {
-		log.Error("Error starting server", slog.Any("error", err))
+		log.Error("Server encountered an error", slog.String("address", cfg.LocalAddress), slog.Any("error", err))
+		return
 	}
-	log.Error("Server shutdown", slog.String("address", cfg.LocalAddress))
+
+	log.Info("Server shutdown gracefully", slog.String("address", cfg.LocalAddress))
 }

@@ -54,24 +54,34 @@ func NewGetVotesHandler(log *slog.Logger, votesClient proto.VotesServiceClient) 
 		const op = "handler.votes.get.New"
 		ctx := r.Context()
 		reqID := middleware.GetReqID(ctx)
-		logger := log.With(slog.String("op", op), slog.Any("request_id", reqID), slog.Any("ip", r.RemoteAddr))
+		logger := log.With(
+			slog.String("operation", op),
+			slog.String("request_id", reqID),
+			slog.String("client_ip", r.RemoteAddr),
+			slog.String("method", r.Method),
+			slog.String("url", r.URL.String()),
+		)
+
+		logger.Info("Received request to get all votes")
 
 		select {
 		case <-ctx.Done():
-			logger.Warn("Request cancelled by the client")
+			logger.Warn("Request was cancelled by the client", slog.String("reason", ctx.Err().Error()))
+			http.Error(w, "Request was cancelled", http.StatusRequestTimeout)
 			return
 		default:
 		}
 
 		resp, err := votesClient.GetVotes(ctx, &proto.GetVotesRequest{})
 		if err != nil {
-			logger.Error("Failed to get votes", slog.String("error", err.Error()))
-			json.WriteError(w, http.StatusInternalServerError, "Could not get votes")
+			logger.Error("Failed to retrieve votes", slog.String("error", err.Error()))
+			json.WriteError(w, http.StatusInternalServerError, "Failed to retrieve votes")
 			return
 		}
 
-		json.WriteJSON(w, http.StatusOK, withDefaultVoteValues(resp))
-		logger.Debug("Votes retrieved successfully")
+		response := withDefaultVoteValues(resp)
+		json.WriteJSON(w, http.StatusOK, response)
+		logger.Debug("Votes retrieved successfully", slog.Any("response", response))
 	}
 }
 
@@ -80,79 +90,91 @@ func NewGetVoteInfoHandler(log *slog.Logger, votesClient proto.VotesServiceClien
 		const op = "handler.votes.getVoteInfo.New"
 		ctx := r.Context()
 		reqID := middleware.GetReqID(ctx)
-		logger := log.With(slog.String("op", op), slog.Any("request_id", reqID), slog.Any("ip", r.RemoteAddr))
+		logger := log.With(
+			slog.String("operation", op),
+			slog.String("request_id", reqID),
+			slog.String("client_ip", r.RemoteAddr),
+			slog.String("method", r.Method),
+			slog.String("url", r.URL.String()),
+		)
+
+		logger.Info("Received request to get vote info")
 
 		select {
 		case <-ctx.Done():
-			logger.Warn("Request cancelled by the client")
+			logger.Warn("Request was cancelled by the client", slog.String("reason", ctx.Err().Error()))
+			http.Error(w, "Request was cancelled", http.StatusRequestTimeout)
 			return
 		default:
 		}
 
 		var request proto.GetVoteInfoRequest
 		if err := json.ReadJSON(r, &request); err != nil {
-			logger.Error("Invalid JSON input", slog.String("error", err.Error()))
+			logger.Error("Failed to parse JSON input", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusBadRequest, "Invalid JSON input")
 			return
 		}
+
 		voteId := request.GetVoteId()
 		if voteId == 0 {
-			logger.Warn("Invalid vote_id field")
+			logger.Warn("Invalid vote_id field", slog.Any("request_payload", request))
 			json.WriteError(w, http.StatusBadRequest, "Invalid vote_id field")
 			return
 		}
 
 		votesResp, err := votesClient.GetVotes(ctx, &proto.GetVotesRequest{})
 		if err != nil {
-			logger.Error("Failed to get vote info", slog.String("error", err.Error()))
-			json.WriteError(w, http.StatusInternalServerError, "Could not get vote info")
+			logger.Error("Failed to retrieve votes", slog.String("error", err.Error()))
+			json.WriteError(w, http.StatusInternalServerError, "Failed to retrieve votes")
 			return
 		}
+
 		var voteResp *proto.Vote
 		for _, vote := range votesResp.GetResponse() {
 			if vote.Id == voteId {
 				voteResp = vote
+				break
 			}
 		}
 		if voteResp == nil {
+			logger.Warn("Vote not found", slog.Int("vote_id", int(voteId)))
 			json.WriteError(w, http.StatusNotFound, "Vote not found")
 			return
 		}
 
-		category := voteResp.Category
 		var detailedResp interface{}
-		switch category {
+		switch voteResp.Category {
 		case "choice":
 			choiceResp, err := votesClient.GetChoiceInfo(ctx, &proto.GetVoteInfoRequest{VoteId: voteId})
 			if err != nil {
-				logger.Error("Failed to get choice info", slog.String("error", err.Error()))
-				json.WriteError(w, http.StatusInternalServerError, "Could not get choice info")
+				logger.Error("Failed to retrieve choice info", slog.String("error", err.Error()))
+				json.WriteError(w, http.StatusInternalServerError, "Failed to retrieve choice info")
 				return
 			}
 			detailedResp = withDefaultChoiceInfo(choiceResp)
 		case "petition":
 			petitionResp, err := votesClient.GetPetitionInfo(ctx, &proto.GetVoteInfoRequest{VoteId: voteId})
 			if err != nil {
-				logger.Error("Failed to get petition info", slog.String("error", err.Error()))
-				json.WriteError(w, http.StatusInternalServerError, "Could not get petition info")
+				logger.Error("Failed to retrieve petition info", slog.String("error", err.Error()))
+				json.WriteError(w, http.StatusInternalServerError, "Failed to retrieve petition info")
 				return
 			}
 			detailedResp = withDefaultPetitionInfo(petitionResp)
 		case "rate":
 			rateResp, err := votesClient.GetRateInfo(ctx, &proto.GetVoteInfoRequest{VoteId: voteId})
 			if err != nil {
-				logger.Error("Failed to get rate info", slog.String("error", err.Error()))
-				json.WriteError(w, http.StatusInternalServerError, "Could not get rate info")
+				logger.Error("Failed to retrieve rate info", slog.String("error", err.Error()))
+				json.WriteError(w, http.StatusInternalServerError, "Failed to retrieve rate info")
 				return
 			}
 			detailedResp = withDefaultRateInfo(rateResp)
 		default:
-			logger.Warn("Unknown vote category")
+			logger.Warn("Unknown vote category", slog.String("category", voteResp.Category))
 			json.WriteError(w, http.StatusBadRequest, "Unknown vote category")
 			return
 		}
+
 		json.WriteJSON(w, http.StatusOK, detailedResp)
-		logger.Debug("Vote info retrieved successfully")
-		return
+		logger.Debug("Vote info retrieved successfully", slog.Any("response", detailedResp))
 	}
 }

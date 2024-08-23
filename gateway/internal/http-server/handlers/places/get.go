@@ -60,24 +60,33 @@ func NewGetPlacesHandler(log *slog.Logger, placesClient proto.PlacesServiceClien
 		const op = "handler.places.get.New"
 		ctx := r.Context()
 		reqID := middleware.GetReqID(ctx)
-		logger := log.With(slog.String("op", op), slog.Any("request_id", reqID), slog.Any("ip", r.RemoteAddr))
+		logger := log.With(
+			slog.String("operation", op),
+			slog.String("request_id", reqID),
+			slog.String("client_ip", r.RemoteAddr),
+			slog.String("method", r.Method),
+			slog.String("url", r.URL.String()),
+		)
+
+		logger.Info("Processing request to get places")
 
 		select {
 		case <-ctx.Done():
-			logger.Warn("Request cancelled by the client")
+			logger.Warn("Request was cancelled by the client", slog.String("reason", ctx.Err().Error()))
+			http.Error(w, "Request was cancelled", http.StatusRequestTimeout)
 			return
 		default:
 		}
 
 		var request proto.GetPlacesRequest
 		if err := json.ReadJSON(r, &request); err != nil {
-			logger.Error("Invalid JSON input", slog.String("error", err.Error()))
+			logger.Error("Failed to parse JSON request", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusBadRequest, "Invalid JSON input")
 			return
 		}
 
 		if err := validateRequest(&request); err != nil {
-			logger.Warn(err.Error())
+			logger.Warn("Invalid request parameters", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -85,29 +94,30 @@ func NewGetPlacesHandler(log *slog.Logger, placesClient proto.PlacesServiceClien
 		resp, err := placesClient.GetPlaces(ctx, &request)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				logger.Warn("Places not found", slog.String("category", request.GetCategory()))
-				json.WriteError(w, http.StatusNotFound, "Places not found")
+				logger.Warn("No places found for the given criteria", slog.String("category", request.GetCategory()), slog.Float64("latitude", request.GetLatitude()), slog.Float64("longitude", request.GetLongitude()))
+				json.WriteError(w, http.StatusNotFound, "No places found for the given criteria")
 				return
 			}
-			logger.Error("Failed to get places", slog.String("error", err.Error()))
-			json.WriteError(w, http.StatusInternalServerError, "Could not get places")
+			logger.Error("Failed to retrieve places from gRPC service", slog.String("error", err.Error()))
+			json.WriteError(w, http.StatusInternalServerError, "Could not retrieve places")
 			return
 		}
 
-		json.WriteJSON(w, http.StatusOK, withDefaultValues(resp))
-		logger.Debug("Places retrieved successfully")
+		response := withDefaultValues(resp)
+		logger.Debug("Places successfully retrieved", slog.Any("response", response))
+		json.WriteJSON(w, http.StatusOK, response)
 	}
 }
 
 func validateRequest(request *proto.GetPlacesRequest) error {
 	if request.GetCategory() == "" {
-		return fmt.Errorf("invalid category field")
+		return fmt.Errorf("category field cannot be empty")
 	}
 	if request.GetLatitude() == 0 {
-		return fmt.Errorf("invalid latitude field")
+		return fmt.Errorf("latitude field cannot be zero")
 	}
 	if request.GetLongitude() == 0 {
-		return fmt.Errorf("invalid longitude field")
+		return fmt.Errorf("longitude field cannot be zero")
 	}
 	return nil
 }

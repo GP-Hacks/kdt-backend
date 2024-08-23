@@ -76,24 +76,25 @@ type GRPCHandler struct {
 func NewGRPCHandler(cfg *config.Config, server *grpc.Server, storage *storage.PostgresStorage, logger *slog.Logger, mqch *amqp.Channel) *GRPCHandler {
 	handler := &GRPCHandler{cfg: cfg, storage: storage, logger: logger, mqch: mqch}
 	proto.RegisterPlacesServiceServer(server, handler)
+	logger.Info("gRPC handler successfully registered")
 	return handler
 }
 
 func (h *GRPCHandler) handleStorageError(err error, entity string) error {
 	if errors.Is(err, pgx.ErrNoRows) {
-		h.logger.Error("No "+entity+" in DB", slog.Any("error", err.Error()))
-		return status.Errorf(codes.NotFound, "No such "+entity+" in database")
+		h.logger.Warn("No "+entity+" found in the database", slog.String("entity", entity), slog.String("error", err.Error()))
+		return status.Errorf(codes.NotFound, "No such "+entity+" in the database")
 	}
-	h.logger.Error("Failed to get "+entity, slog.Any("error", err.Error()))
-	return status.Errorf(codes.Internal, "Please try again later")
+	h.logger.Error("Error occurred while retrieving "+entity, slog.String("entity", entity), slog.String("error", err.Error()))
+	return status.Errorf(codes.Internal, "An internal error occurred, please try again later")
 }
 
 func (h *GRPCHandler) GetPlaces(ctx context.Context, request *proto.GetPlacesRequest) (*proto.GetPlacesResponse, error) {
-	h.logger.Debug("Processing GetPlaces")
+	h.logger.Debug("Processing GetPlaces request", slog.Any("request", request))
 
 	select {
 	case <-ctx.Done():
-		h.logger.Warn("Request was cancelled")
+		h.logger.Warn("Request was cancelled by the client", slog.Any("request", request))
 		return nil, ctx.Err()
 	default:
 	}
@@ -110,6 +111,8 @@ func (h *GRPCHandler) GetPlaces(ctx context.Context, request *proto.GetPlacesReq
 	if err != nil {
 		return nil, h.handleStorageError(err, "places")
 	}
+
+	h.logger.Info("Places retrieved from the database", slog.Int("count", len(places)))
 
 	userLatitude := request.GetLatitude()
 	userLongitude := request.GetLongitude()
@@ -145,15 +148,19 @@ func (h *GRPCHandler) GetPlaces(ctx context.Context, request *proto.GetPlacesReq
 		})
 	}
 
+	h.logger.Info("Successfully processed GetPlaces request", slog.Int("response_count", len(responsePlaces)))
 	return &proto.GetPlacesResponse{Response: responsePlaces}, nil
 }
 
 func (h *GRPCHandler) getPlacePhotos(ctx context.Context, placeID int) ([]*proto.Photo, error) {
+	h.logger.Debug("Retrieving photos for place", slog.Int("place_id", placeID))
+
 	placePhotos, err := h.storage.GetPhotosById(ctx, placeID)
 	if err != nil {
 		return nil, h.handleStorageError(err, "photos")
 	}
 	if placePhotos == nil {
+		h.logger.Warn("No photos found for place", slog.Int("place_id", placeID))
 		placePhotos = []*storage.Photo{}
 	}
 
@@ -162,14 +169,16 @@ func (h *GRPCHandler) getPlacePhotos(ctx context.Context, placeID int) ([]*proto
 		protoPhotos = append(protoPhotos, &proto.Photo{Url: placePhoto.Url})
 	}
 
+	h.logger.Info("Photos retrieved successfully", slog.Int("place_id", placeID), slog.Int("photo_count", len(protoPhotos)))
 	return protoPhotos, nil
 }
 
 func (h *GRPCHandler) BuyTicket(ctx context.Context, request *proto.BuyTicketRequest) (*proto.BuyTicketResponse, error) {
-	h.logger.Debug("Processing BuyTicket")
+	h.logger.Debug("Processing BuyTicket request", slog.Any("request", request))
+
 	select {
 	case <-ctx.Done():
-		h.logger.Warn("Request was cancelled")
+		h.logger.Warn("Request was cancelled by the client", slog.Any("request", request))
 		return nil, ctx.Err()
 	default:
 	}
@@ -185,10 +194,11 @@ func (h *GRPCHandler) BuyTicket(ctx context.Context, request *proto.BuyTicketReq
 		Content: fmt.Sprintf("Вы приобрели билет на %s в %s", dbPlace.Name, request.GetTimestamp().AsTime().Format("15:04")),
 		Time:    request.GetTimestamp().AsTime().Add(-15 * time.Minute),
 	}
-	err = h.publishToRabbitMQ(message, h.cfg.QueueNotifications)
-	if err != nil {
-		h.logger.Error("Failed to publish message to RabbitMQ", slog.Any("error", err.Error()))
+	if err := h.publishToRabbitMQ(message, h.cfg.QueueNotifications); err != nil {
+		h.logger.Error("Failed to publish notification message to RabbitMQ", slog.Any("error", err.Error()))
+		return nil, status.Errorf(codes.Internal, "An error occurred while processing your purchase")
 	}
+	h.logger.Info("Notification message successfully published to RabbitMQ", slog.String("queue", h.cfg.QueueNotifications))
 
 	purchaseMessage := PurchaseMessage{
 		UserToken:    request.GetToken(),
@@ -197,24 +207,26 @@ func (h *GRPCHandler) BuyTicket(ctx context.Context, request *proto.BuyTicketReq
 		PurchaseTime: time.Now(),
 		Cost:         dbPlace.Cost,
 	}
-	err = h.publishToRabbitMQ(purchaseMessage, h.cfg.QueuePurchases)
-	if err != nil {
-		h.logger.Error("Failed to publish message to RabbitMQ", slog.Any("error", err.Error()))
+	if err := h.publishToRabbitMQ(purchaseMessage, h.cfg.QueuePurchases); err != nil {
+		h.logger.Error("Failed to publish purchase message to RabbitMQ", slog.Any("error", err.Error()))
+		return nil, status.Errorf(codes.Internal, "An error occurred while processing your purchase")
 	}
+	h.logger.Info("Purchase message successfully published to RabbitMQ", slog.String("queue", h.cfg.QueuePurchases))
 
 	return &proto.BuyTicketResponse{
-		Response: "Successfully bought ticket",
+		Response: "Ticket purchased successfully",
 	}, nil
 }
 
 func (h *GRPCHandler) GetCategories(ctx context.Context, request *proto.GetCategoriesRequest) (*proto.GetCategoriesResponse, error) {
-	h.logger.Debug("Processing GetCategories")
+	h.logger.Debug("Processing GetCategories request")
 
 	categories, err := h.storage.GetCategories(ctx)
 	if err != nil {
 		return nil, h.handleStorageError(err, "categories")
 	}
 
+	h.logger.Info("Successfully retrieved categories", slog.Int("count", len(categories)))
 	return &proto.GetCategoriesResponse{Categories: categories}, nil
 }
 

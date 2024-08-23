@@ -9,7 +9,6 @@ type Config struct {
 	QueueNotifications string
 	QueuePurchases     string
 	PostgresAddress    string
-	LocalAddress       string
 }
 
 func MustLoad() *Config {
@@ -20,6 +19,5 @@ func MustLoad() *Config {
 		QueueNotifications: os.Getenv("QUEUE_NOTIFICATIONS"),
 		QueuePurchases:     os.Getenv("QUEUE_PURCHASES"),
 		PostgresAddress:    os.Getenv("POSTGRES_ADDRESS"),
-		LocalAddress:       os.Getenv("LOCAL_ADDRESS"),
 	}
 }

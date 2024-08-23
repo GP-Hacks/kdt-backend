@@ -49,44 +49,56 @@ func withDefaultValues(resp *proto.GetCollectionsResponse) *GetCollectionsRespon
 
 func NewGetCollectionsHandler(log *slog.Logger, charityClient proto.CharityServiceClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		const op = "handler.charity.get.New"
+		const op = "handler.charity.getCollections.New"
 		ctx := r.Context()
 		reqID := middleware.GetReqID(ctx)
-		logger := log.With(slog.String("op", op), slog.Any("request_id", reqID), slog.Any("ip", r.RemoteAddr))
+		logger := log.With(
+			slog.String("operation", op),
+			slog.String("request_id", reqID),
+			slog.String("client_ip", r.RemoteAddr),
+			slog.String("method", r.Method),
+			slog.String("url", r.URL.String()),
+		)
+
+		logger.Info("Received request to get collections")
 
 		select {
 		case <-ctx.Done():
-			logger.Warn("Request cancelled by the client")
+			logger.Warn("Request was cancelled by the client")
+			http.Error(w, "Request was cancelled", http.StatusRequestTimeout)
 			return
 		default:
 		}
 
 		var request proto.GetCollectionsRequest
 		if err := json.ReadJSON(r, &request); err != nil {
-			logger.Error("Invalid JSON input", slog.String("error", err.Error()))
+			logger.Error("Failed to parse JSON input", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusBadRequest, "Invalid JSON input")
 			return
 		}
 
 		if request.GetCategory() == "" {
-			logger.Warn("Request does not contain a category")
-			json.WriteError(w, http.StatusBadRequest, "Invalid category field")
+			logger.Warn("Request missing category", slog.String("category", request.GetCategory()))
+			json.WriteError(w, http.StatusBadRequest, "Category field is required")
 			return
 		}
+
+		logger.Info("Fetching collections for category", slog.String("category", request.GetCategory()))
 
 		resp, err := charityClient.GetCollections(ctx, &request)
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				logger.Warn("Collections not found", slog.String("category", request.GetCategory()))
+				logger.Warn("Collections not found for category", slog.String("category", request.GetCategory()))
 				json.WriteError(w, http.StatusNotFound, "Collections not found")
 				return
 			}
-			logger.Error("Failed to get collections", slog.String("error", err.Error()))
-			json.WriteError(w, http.StatusInternalServerError, "Could not get collections")
+			logger.Error("Failed to fetch collections", slog.String("error", err.Error()))
+			json.WriteError(w, http.StatusInternalServerError, "Could not retrieve collections")
 			return
 		}
 
+		logger.Debug("Successfully retrieved collections", slog.Int("num_collections", len(resp.GetResponse())))
+
 		json.WriteJSON(w, http.StatusOK, withDefaultValues(resp))
-		logger.Debug("Collections retrieved successfully")
 	}
 }

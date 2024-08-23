@@ -46,36 +46,46 @@ func NewVoteRateHandler(log *slog.Logger, votesClient proto.VotesServiceClient) 
 		const op = "handler.votes.voteRate.New"
 		ctx := r.Context()
 		reqID := middleware.GetReqID(ctx)
-		logger := log.With(slog.String("op", op), slog.Any("request_id", reqID), slog.Any("ip", r.RemoteAddr))
+		logger := log.With(
+			slog.String("operation", op),
+			slog.String("request_id", reqID),
+			slog.String("client_ip", r.RemoteAddr),
+			slog.String("method", r.Method),
+			slog.String("url", r.URL.String()),
+		)
+
+		logger.Info("Received request to vote on rate")
 
 		select {
 		case <-ctx.Done():
-			logger.Warn("Request cancelled by the client")
+			logger.Warn("Request cancelled by the client", slog.String("reason", ctx.Err().Error()))
+			http.Error(w, "Request was cancelled", http.StatusRequestTimeout)
 			return
 		default:
 		}
 
 		token := r.Header.Get("Authorization")
 		if token == "" {
-			json.WriteError(w, http.StatusUnauthorized, "Authorization required")
+			logger.Warn("Authorization token is missing")
+			json.WriteError(w, http.StatusUnauthorized, "Authorization token is required")
 			return
 		}
 
 		var request proto.VoteRateRequest
 		if err := json.ReadJSON(r, &request); err != nil {
-			logger.Error("Invalid JSON input", slog.String("error", err.Error()))
+			logger.Error("Failed to parse JSON input", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusBadRequest, "Invalid JSON input")
 			return
 		}
 
 		if request.GetVoteId() == 0 {
-			logger.Warn("Invalid vote_id field")
+			logger.Warn("Invalid or missing vote_id", slog.Any("request", request))
 			json.WriteError(w, http.StatusBadRequest, "Invalid vote_id field")
 			return
 		}
 
 		if request.GetRating() == 0 {
-			logger.Warn("Invalid rating field")
+			logger.Warn("Invalid or missing rating", slog.Any("request", request))
 			json.WriteError(w, http.StatusBadRequest, "Invalid rating field")
 			return
 		}
@@ -85,11 +95,11 @@ func NewVoteRateHandler(log *slog.Logger, votesClient proto.VotesServiceClient) 
 		resp, err := votesClient.VoteRate(ctx, &request)
 		if err != nil {
 			logger.Error("Failed to record vote", slog.String("error", err.Error()))
-			json.WriteError(w, http.StatusInternalServerError, "Could not record vote")
+			json.WriteError(w, http.StatusInternalServerError, "Failed to record vote")
 			return
 		}
 
+		logger.Info("Vote recorded successfully", slog.Any("response", resp))
 		json.WriteJSON(w, http.StatusOK, resp)
-		logger.Debug("Vote recorded successfully")
 	}
 }

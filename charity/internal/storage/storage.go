@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"log/slog"
 )
 
 type Collection struct {
@@ -21,26 +22,35 @@ type Collection struct {
 }
 
 type PostgresStorage struct {
-	DB *pgxpool.Pool
+	DB     *pgxpool.Pool
+	logger *slog.Logger
 }
 
-func NewPostgresStorage(storagePath string) (*PostgresStorage, error) {
+func NewPostgresStorage(storagePath string, logger *slog.Logger) (*PostgresStorage, error) {
 	const op = "storage.postgresql.New"
+	logger.Info("Initializing PostgreSQL storage", slog.String("storagePath", storagePath))
+
 	dbpool, err := pgxpool.New(context.Background(), storagePath)
 	if err != nil {
+		logger.Error("Failed to create PostgreSQL connection pool", slog.String("operation", op), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	return &PostgresStorage{DB: dbpool}, nil
+	logger.Info("PostgreSQL storage initialized successfully")
+	return &PostgresStorage{DB: dbpool, logger: logger}, nil
 }
 
 func (s *PostgresStorage) Close() {
+	s.logger.Info("Closing PostgreSQL connection pool")
 	s.DB.Close()
 }
 
 func (s *PostgresStorage) GetCategories(ctx context.Context) ([]string, error) {
 	const op = "storage.postgresql.GetCategories"
+	s.logger.Info("Fetching categories from database", slog.String("operation", op))
+
 	rows, err := s.DB.Query(ctx, "SELECT DISTINCT category FROM charity")
 	if err != nil {
+		s.logger.Error("Failed to fetch categories", slog.String("operation", op), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	defer rows.Close()
@@ -49,28 +59,35 @@ func (s *PostgresStorage) GetCategories(ctx context.Context) ([]string, error) {
 	for rows.Next() {
 		var category string
 		if err := rows.Scan(&category); err != nil {
+			s.logger.Error("Failed to scan category row", slog.String("operation", op), slog.String("error", err.Error()))
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 		categories = append(categories, category)
 	}
 
 	if err := rows.Err(); err != nil {
+		s.logger.Error("Error occurred during row iteration", slog.String("operation", op), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
+	s.logger.Info("Categories fetched successfully", slog.Int("count", len(categories)))
 	return categories, nil
 }
 
 func (s *PostgresStorage) GetCollections(ctx context.Context) ([]*Collection, error) {
 	const op = "storage.postgresql.GetCollections"
 	query := "SELECT id, category, name, description, organization, phone, website, goal, current, photo FROM charity"
-	return s.fetchPlaces(ctx, query)
+	s.logger.Info("Fetching all collections from database", slog.String("operation", op))
+
+	return s.fetchCollections(ctx, query)
 }
 
 func (s *PostgresStorage) GetCollectionsByCategory(ctx context.Context, category string) ([]*Collection, error) {
 	const op = "storage.postgresql.GetCollectionsByCategory"
 	query := "SELECT id, category, name, description, organization, phone, website, goal, current, photo FROM charity WHERE category = $1"
-	return s.fetchPlaces(ctx, query, category)
+	s.logger.Info("Fetching collections by category", slog.String("operation", op), slog.String("category", category))
+
+	return s.fetchCollections(ctx, query, category)
 }
 
 func (s *PostgresStorage) UpdateCollection(ctx context.Context, collectionId int, amount int) error {
@@ -80,18 +97,25 @@ func (s *PostgresStorage) UpdateCollection(ctx context.Context, collectionId int
 		SET current = current + $1 
 		WHERE id = $2
 	`
+	s.logger.Info("Updating collection", slog.String("operation", op), slog.Int("collection_id", collectionId), slog.Int("amount", amount))
+
 	_, err := s.DB.Exec(ctx, query, amount, collectionId)
 	if err != nil {
+		s.logger.Error("Failed to update collection", slog.String("operation", op), slog.String("error", err.Error()))
 		return fmt.Errorf("%s: failed to update collection: %w", op, err)
 	}
 
+	s.logger.Info("Collection updated successfully", slog.Int("collection_id", collectionId))
 	return nil
 }
 
-func (s *PostgresStorage) fetchPlaces(ctx context.Context, query string, args ...interface{}) ([]*Collection, error) {
-	const op = "storage.postgresql.fetchPlaces"
+func (s *PostgresStorage) fetchCollections(ctx context.Context, query string, args ...interface{}) ([]*Collection, error) {
+	const op = "storage.postgresql.fetchCollections"
+	s.logger.Info("Executing query to fetch collections", slog.String("operation", op), slog.String("query", query))
+
 	rows, err := s.DB.Query(ctx, query, args...)
 	if err != nil {
+		s.logger.Error("Failed to execute query", slog.String("operation", op), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	defer rows.Close()
@@ -104,16 +128,23 @@ func (s *PostgresStorage) fetchPlaces(ctx context.Context, query string, args ..
 			&collection.Phone, &collection.Website, &collection.Goal, &collection.Current, &collection.Photo,
 		)
 		if err != nil {
+			s.logger.Error("Failed to scan collection row", slog.String("operation", op), slog.String("error", err.Error()))
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 		collections = append(collections, collection)
 	}
+
 	if err := rows.Err(); err != nil {
+		s.logger.Error("Error occurred during row iteration", slog.String("operation", op), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
+
 	if len(collections) == 0 && len(args) > 0 {
+		s.logger.Warn("No collections found for the provided category", slog.String("category", args[0].(string)))
 		return nil, pgx.ErrNoRows
 	}
+
+	s.logger.Info("Collections fetched successfully", slog.Int("count", len(collections)))
 	return collections, nil
 }
 
@@ -132,7 +163,7 @@ func (s *PostgresStorage) FetchAndStoreData(ctx context.Context) error {
 	}
 
 	collections := []Collection{
-		{1, "Здравоохранение и медицинская помощь", "Помощь людям больных остеогенезом", " «Хрупкие люди» — это команда единомышленников, неравнодушных к проблемам больных несовершенным остеогенезом. Каждый день нашей работы направлен на открытие новых возможностей для улучшения здоровья людей с врожденной хрупкостью костей и создание условий для их полноценной жизни в обществе.", "Хрупкие люди", "+79035900400", "https://nuzhnapomosh.ru/funds/khrupkie_lyudi_1147799018454/", 6350000, 6328299, "https://nuzhnapomosh.ru/funds/khrupkie_lyudi_1147799018454/\", 6350000, 6328299, “https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT4c0QC58ZG8baBP4xH7wd90Er2K5BmG7IlHw&s"},
+		{1, "Здравоохранение и медицинская помощь", "Помощь людям больных остеогенезом", " «Хрупкие люди» — это команда единомышленников, неравнодушных к проблемам больных несовершенным остеогенезом. Каждый день нашей работы направлен на открытие новых возможностей для улучшения здоровья людей с врожденной хрупкостью костей и создание условий для их полноценной жизни в обществе.", "Хрупкие люди", "+79035900400", "https://nuzhnapomosh.ru/funds/khrupkie_lyudi_1147799018454/", 6350000, 6328299, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT4c0QC58ZG8baBP4xH7wd90Er2K5BmG7IlHw&s"},
 		{
 			2, "Социальные услуги", "Помощь жителям Татарстана имеющих трудные жизненные обстоятельства", "Наша миссия заключается не только в очевидном спасении нуждающихся, но и в облагораживании внутреннего мира многих людей. Помогая другим в трудных жизненных обстоятельствах, мы духовно и нравственно растем, а значит, и качество жизни общества со временем улучшается, а уровень безопасности внутри страны растет. На нашем сайте, освещающем нашу работу в Казани, вы можете убедиться, что благотворительность — это не просто слова, а реальная помощь. Наш благотворительный фонд — это не закрытая организация, деятельность которой нужно держать в секрете. Мы принимаем помощь других и всегда готовы представить отчет о своих действиях. ", "Добро даром", "+79370090960", "https://dobrodarom.ru", 800000, 580000, "https://sun9-11.userapi.com/impf/Ss1C5VOs_0dc-Qg4y1pkwhVND0yoGTqahFdLZg/cHmxfR95I94.jpg?size=1920x768&quality=95&crop=0,105,2560,1022&sign=2803c5ed79d705f945b87ab7bc4ee79e&type=cover_group",
 		},

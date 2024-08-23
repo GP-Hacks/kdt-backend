@@ -1,9 +1,12 @@
 package votes
 
 import (
+	"fmt"
 	"github.com/GP-Hack/kdt2024-commons/api/proto"
 	"github.com/GP-Hack/kdt2024-commons/json"
 	"github.com/go-chi/chi/v5/middleware"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"log/slog"
 	"net/http"
 	"time"
@@ -51,50 +54,66 @@ func NewVoteChoiceHandler(log *slog.Logger, votesClient proto.VotesServiceClient
 		const op = "handler.votes.voteChoice.New"
 		ctx := r.Context()
 		reqID := middleware.GetReqID(ctx)
-		logger := log.With(slog.String("op", op), slog.Any("request_id", reqID), slog.Any("ip", r.RemoteAddr))
+		logger := log.With(
+			slog.String("operation", op),
+			slog.String("request_id", reqID),
+			slog.String("client_ip", r.RemoteAddr),
+			slog.String("method", r.Method),
+			slog.String("url", r.URL.String()),
+		)
+
+		logger.Info("Processing vote choice request")
 
 		select {
 		case <-ctx.Done():
-			logger.Warn("Request cancelled by the client")
+			logger.Warn("Request was cancelled by the client", slog.String("reason", ctx.Err().Error()))
+			http.Error(w, "Request was cancelled", http.StatusRequestTimeout)
 			return
 		default:
 		}
 
 		token := r.Header.Get("Authorization")
 		if token == "" {
+			logger.Warn("Missing Authorization header")
 			json.WriteError(w, http.StatusUnauthorized, "Authorization required")
 			return
 		}
 
 		var request proto.VoteChoiceRequest
 		if err := json.ReadJSON(r, &request); err != nil {
-			logger.Error("Invalid JSON input", slog.String("error", err.Error()))
+			logger.Error("Failed to parse JSON input", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusBadRequest, "Invalid JSON input")
 			return
 		}
 
 		if request.GetVoteId() == 0 {
-			logger.Warn("Invalid vote_id field")
+			logger.Warn("Invalid vote_id field in request", slog.String("request_payload", fmt.Sprintf("%+v", request)))
 			json.WriteError(w, http.StatusBadRequest, "Invalid vote_id field")
 			return
 		}
 
 		if request.GetChoice() == "" {
-			logger.Warn("Invalid choice field")
+			logger.Warn("Invalid choice field in request", slog.String("request_payload", fmt.Sprintf("%+v", request)))
 			json.WriteError(w, http.StatusBadRequest, "Invalid choice field")
 			return
 		}
 
 		request.Token = token
 
-		resp, err := votesClient.VoteChoice(ctx, &request)
+		_, err := votesClient.VoteChoice(ctx, &request)
 		if err != nil {
-			logger.Error("Failed to record vote", slog.String("error", err.Error()))
+			if status.Code(err) == codes.NotFound {
+				logger.Warn("Vote choice not found", slog.String("error", err.Error()), slog.Any("request", request))
+				json.WriteError(w, http.StatusNotFound, "Choice not found")
+				return
+			}
+			logger.Error("Failed to record vote", slog.String("error", err.Error()), slog.Any("request", request))
 			json.WriteError(w, http.StatusInternalServerError, "Could not record vote")
 			return
 		}
 
-		json.WriteJSON(w, http.StatusOK, resp)
-		logger.Debug("Vote recorded successfully")
+		response := map[string]string{"response": "Vote recorded successfully"}
+		logger.Info("Vote recorded successfully", slog.Any("response", response))
+		json.WriteJSON(w, http.StatusOK, response)
 	}
 }
