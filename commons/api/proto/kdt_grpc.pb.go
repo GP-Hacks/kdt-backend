@@ -162,6 +162,7 @@ const (
 	PlacesService_GetPlaces_FullMethodName     = "/api.PlacesService/GetPlaces"
 	PlacesService_GetCategories_FullMethodName = "/api.PlacesService/GetCategories"
 	PlacesService_BuyTicket_FullMethodName     = "/api.PlacesService/BuyTicket"
+	PlacesService_GetTickets_FullMethodName    = "/api.PlacesService/GetTickets"
 	PlacesService_HealthCheck_FullMethodName   = "/api.PlacesService/HealthCheck"
 )
 
@@ -172,6 +173,7 @@ type PlacesServiceClient interface {
 	GetPlaces(ctx context.Context, in *GetPlacesRequest, opts ...grpc.CallOption) (*GetPlacesResponse, error)
 	GetCategories(ctx context.Context, in *GetCategoriesRequest, opts ...grpc.CallOption) (*GetCategoriesResponse, error)
 	BuyTicket(ctx context.Context, in *BuyTicketRequest, opts ...grpc.CallOption) (*BuyTicketResponse, error)
+	GetTickets(ctx context.Context, in *GetTicketsRequest, opts ...grpc.CallOption) (*GetTicketsResponse, error)
 	HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error)
 }
 
@@ -213,6 +215,16 @@ func (c *placesServiceClient) BuyTicket(ctx context.Context, in *BuyTicketReques
 	return out, nil
 }
 
+func (c *placesServiceClient) GetTickets(ctx context.Context, in *GetTicketsRequest, opts ...grpc.CallOption) (*GetTicketsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTicketsResponse)
+	err := c.cc.Invoke(ctx, PlacesService_GetTickets_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *placesServiceClient) HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HealthCheckResponse)
@@ -230,6 +242,7 @@ type PlacesServiceServer interface {
 	GetPlaces(context.Context, *GetPlacesRequest) (*GetPlacesResponse, error)
 	GetCategories(context.Context, *GetCategoriesRequest) (*GetCategoriesResponse, error)
 	BuyTicket(context.Context, *BuyTicketRequest) (*BuyTicketResponse, error)
+	GetTickets(context.Context, *GetTicketsRequest) (*GetTicketsResponse, error)
 	HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error)
 	mustEmbedUnimplementedPlacesServiceServer()
 }
@@ -249,6 +262,9 @@ func (UnimplementedPlacesServiceServer) GetCategories(context.Context, *GetCateg
 }
 func (UnimplementedPlacesServiceServer) BuyTicket(context.Context, *BuyTicketRequest) (*BuyTicketResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BuyTicket not implemented")
+}
+func (UnimplementedPlacesServiceServer) GetTickets(context.Context, *GetTicketsRequest) (*GetTicketsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTickets not implemented")
 }
 func (UnimplementedPlacesServiceServer) HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HealthCheck not implemented")
@@ -328,6 +344,24 @@ func _PlacesService_BuyTicket_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PlacesService_GetTickets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTicketsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PlacesServiceServer).GetTickets(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PlacesService_GetTickets_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PlacesServiceServer).GetTickets(ctx, req.(*GetTicketsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PlacesService_HealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(HealthCheckRequest)
 	if err := dec(in); err != nil {
@@ -364,6 +398,10 @@ var PlacesService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BuyTicket",
 			Handler:    _PlacesService_BuyTicket_Handler,
+		},
+		{
+			MethodName: "GetTickets",
+			Handler:    _PlacesService_GetTickets_Handler,
 		},
 		{
 			MethodName: "HealthCheck",
@@ -592,6 +630,7 @@ var CharityService_ServiceDesc = grpc.ServiceDesc{
 
 const (
 	VotesService_GetVotes_FullMethodName        = "/api.VotesService/GetVotes"
+	VotesService_GetCategories_FullMethodName   = "/api.VotesService/GetCategories"
 	VotesService_GetRateInfo_FullMethodName     = "/api.VotesService/GetRateInfo"
 	VotesService_GetPetitionInfo_FullMethodName = "/api.VotesService/GetPetitionInfo"
 	VotesService_GetChoiceInfo_FullMethodName   = "/api.VotesService/GetChoiceInfo"
@@ -606,6 +645,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type VotesServiceClient interface {
 	GetVotes(ctx context.Context, in *GetVotesRequest, opts ...grpc.CallOption) (*GetVotesResponse, error)
+	GetCategories(ctx context.Context, in *GetCategoriesRequest, opts ...grpc.CallOption) (*GetCategoriesResponse, error)
 	GetRateInfo(ctx context.Context, in *GetVoteInfoRequest, opts ...grpc.CallOption) (*GetRateInfoResponse, error)
 	GetPetitionInfo(ctx context.Context, in *GetVoteInfoRequest, opts ...grpc.CallOption) (*GetPetitionInfoResponse, error)
 	GetChoiceInfo(ctx context.Context, in *GetVoteInfoRequest, opts ...grpc.CallOption) (*GetChoiceInfoResponse, error)
@@ -627,6 +667,16 @@ func (c *votesServiceClient) GetVotes(ctx context.Context, in *GetVotesRequest, 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetVotesResponse)
 	err := c.cc.Invoke(ctx, VotesService_GetVotes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *votesServiceClient) GetCategories(ctx context.Context, in *GetCategoriesRequest, opts ...grpc.CallOption) (*GetCategoriesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCategoriesResponse)
+	err := c.cc.Invoke(ctx, VotesService_GetCategories_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -708,6 +758,7 @@ func (c *votesServiceClient) HealthCheck(ctx context.Context, in *HealthCheckReq
 // for forward compatibility.
 type VotesServiceServer interface {
 	GetVotes(context.Context, *GetVotesRequest) (*GetVotesResponse, error)
+	GetCategories(context.Context, *GetCategoriesRequest) (*GetCategoriesResponse, error)
 	GetRateInfo(context.Context, *GetVoteInfoRequest) (*GetRateInfoResponse, error)
 	GetPetitionInfo(context.Context, *GetVoteInfoRequest) (*GetPetitionInfoResponse, error)
 	GetChoiceInfo(context.Context, *GetVoteInfoRequest) (*GetChoiceInfoResponse, error)
@@ -727,6 +778,9 @@ type UnimplementedVotesServiceServer struct{}
 
 func (UnimplementedVotesServiceServer) GetVotes(context.Context, *GetVotesRequest) (*GetVotesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetVotes not implemented")
+}
+func (UnimplementedVotesServiceServer) GetCategories(context.Context, *GetCategoriesRequest) (*GetCategoriesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetCategories not implemented")
 }
 func (UnimplementedVotesServiceServer) GetRateInfo(context.Context, *GetVoteInfoRequest) (*GetRateInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetRateInfo not implemented")
@@ -784,6 +838,24 @@ func _VotesService_GetVotes_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(VotesServiceServer).GetVotes(ctx, req.(*GetVotesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VotesService_GetCategories_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCategoriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VotesServiceServer).GetCategories(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VotesService_GetCategories_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VotesServiceServer).GetCategories(ctx, req.(*GetCategoriesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -924,6 +996,10 @@ var VotesService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetVotes",
 			Handler:    _VotesService_GetVotes_Handler,
+		},
+		{
+			MethodName: "GetCategories",
+			Handler:    _VotesService_GetCategories_Handler,
 		},
 		{
 			MethodName: "GetRateInfo",

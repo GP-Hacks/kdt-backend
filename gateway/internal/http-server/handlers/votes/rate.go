@@ -1,8 +1,8 @@
 package votes
 
 import (
-	"github.com/GP-Hack/kdt2024-commons/api/proto"
-	"github.com/GP-Hack/kdt2024-commons/json"
+	"github.com/GP-Hacks/kdt2024-commons/api/proto"
+	"github.com/GP-Hacks/kdt2024-commons/json"
 	"github.com/go-chi/chi/v5/middleware"
 	"log/slog"
 	"net/http"
@@ -23,6 +23,7 @@ type RateInfoWithDefault struct {
 	Photo        string   `json:"photo"`
 	Options      []string `json:"options"`
 	Mid          float64  `json:"mid"`
+	Rate         float64  `json:"rate,omitempty"`
 }
 
 func withDefaultRateInfo(resp *proto.GetRateInfoResponse) *GetRateInfoResponseWithDefault {
@@ -37,6 +38,7 @@ func withDefaultRateInfo(resp *proto.GetRateInfoResponse) *GetRateInfoResponseWi
 			Photo:        resp.GetResponse().Photo,
 			Options:      resp.GetResponse().Options,
 			Mid:          float64(resp.GetResponse().Mid),
+			Rate:         float64(resp.GetResponse().Rate),
 		},
 	}
 }

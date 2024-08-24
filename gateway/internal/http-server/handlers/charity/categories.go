@@ -1,8 +1,8 @@
 package charity
 
 import (
-	"github.com/GP-Hack/kdt2024-commons/api/proto"
-	"github.com/GP-Hack/kdt2024-commons/json"
+	"github.com/GP-Hacks/kdt2024-commons/api/proto"
+	"github.com/GP-Hacks/kdt2024-commons/json"
 	"github.com/go-chi/chi/v5/middleware"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

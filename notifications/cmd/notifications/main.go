@@ -6,7 +6,7 @@ import (
 	"errors"
 	firebase "firebase.google.com/go"
 	"firebase.google.com/go/messaging"
-	"github.com/GP-Hack/kdt2024-commons/prettylogger"
+	"github.com/GP-Hacks/kdt2024-commons/prettylogger"
 	"github.com/GP-Hacks/kdt2024-notifications/config"
 	"github.com/streadway/amqp"
 	"go.mongodb.org/mongo-driver/bson"

@@ -1,0 +1,701 @@
+openapi: 3.0.0
+info:
+  title: Kazan Digital Transformation
+  description: <b><h2>by God`s Plan.</h2>Обновление функционала для приложения «Карта жителя Республики Татарстан». Создание сервисов «Благотворительность», «Голосование», «Чат-бот технической поддержки» и «Татарстан. Места» для улучшения пользовательского восприятия, увеличения активности  и банковский транзакций в экосистеме «АК Барс».</b>
+  version: 1.0.0
+servers:
+  - url: http://95.174.92.20:8086
+
+tags:
+  - name: Chat
+    description: Запросы, связанные с чатом
+  - name: Places
+    description: Запросы, связанные с местами
+  - name: User
+    description: Запросы, связанные с пользователями
+  - name: Charity
+    description: Запросы, связанные с благотворительностью
+  - name: Votes
+    description: Запросы, связанные с голосованиями
+
+paths:
+  /api/chat/ask:
+    post:
+      tags:
+        - Chat
+      summary: Задать вопрос в чате
+      operationId: askQuestion
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/places:
+    post:
+      tags:
+        - Places
+      summary: Получить места по категории
+      operationId: getPlaces
+      parameters:
+        - in: query
+          name: category
+          schema:
+            type: string
+          required: true
+          description: Категория мест
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationRequest'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlacesResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/places/buy:
+    post:
+      tags:
+        - Places
+      summary: Купить билет
+      operationId: buyTicket
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuyTicketRequest'
+      responses:
+        '200':
+          description: Успешная покупка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuyTicketResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/user/token:
+    post:
+      tags:
+        - User
+      summary: Добавить токен пользователя
+      operationId: addUserToken
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserTokenRequest'
+      responses:
+        '200':
+          description: Токен успешно добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserTokenResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/charity/categories:
+    get:
+      tags:
+        - Charity
+      summary: Получить категории благотворительности
+      operationId: getCharityCategories
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoriesResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/places/categories:
+    get:
+      tags:
+        - Places
+      summary: Получить категории мест
+      operationId: getPlacesCategories
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoriesResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/charity:
+    get:
+      tags:
+        - Charity
+      summary: Получить информацию о благотворительности по категории
+      operationId: getCharityInfo
+      parameters:
+        - in: query
+          name: category
+          schema:
+            type: string
+          required: true
+          description: Категория благотворительности
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharityResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/charity/donate:
+    post:
+      tags:
+        - Charity
+      summary: Пожертвовать на благотворительность
+      operationId: donateToCharity
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DonateRequest'
+      responses:
+        '200':
+          description: Успешное пожертвование
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DonateResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/votes:
+    get:
+      tags:
+        - Votes
+      summary: Получить голосования по категории
+      operationId: getVotes
+      parameters:
+        - in: query
+          name: category
+          schema:
+            type: string
+          required: true
+          description: Категория голосования
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VotesResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/votes/info:
+    get:
+      tags:
+        - Votes
+      summary: Получить информацию о голосовании
+      operationId: getVoteInfo
+      parameters:
+        - in: query
+          name: vote_id
+          schema:
+            type: integer
+          required: true
+          description: ID голосования
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteInfoResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/votes/rate:
+    post:
+      tags:
+        - Votes
+      summary: Оценить голосование
+      operationId: rateVote
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RateVoteRequest'
+      responses:
+        '200':
+          description: Успешная оценка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/votes/petition:
+    post:
+      tags:
+        - Votes
+      summary: Поддержать петицию голосования
+      operationId: petitionVote
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PetitionVoteRequest'
+      responses:
+        '200':
+          description: Успешное голосование
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/votes/choice:
+    post:
+      tags:
+        - Votes
+      summary: Выбор в голосовании
+      operationId: chooseVoteOption
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChoiceVoteRequest'
+      responses:
+        '200':
+          description: Успешный выбор
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/votes/categories:
+    get:
+      tags:
+        - Votes
+      summary: Получить категории голосований
+      operationId: getVoteCategories
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoriesResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/places/tickets:
+    get:
+      tags:
+        - Places
+      summary: Получить купленные билеты
+      operationId: getPurchasedTickets
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketsResponse'
+        '400':
+          description: Ошибка в запросе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ChatRequest:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+      required:
+        - messages
+
+    ChatResponse:
+      type: object
+      properties:
+        response:
+          type: string
+
+    LocationRequest:
+      type: object
+      properties:
+        latitude:
+          type: number
+        longitude:
+          type: number
+      required:
+        - latitude
+        - longitude
+
+    PlacesResponse:
+      type: object
+      properties:
+        response:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              category:
+                type: string
+              description:
+                type: string
+              latitude:
+                type: number
+              longitude:
+                type: number
+              location:
+                type: string
+              name:
+                type: string
+              tel:
+                type: string
+              website:
+                type: string
+              cost:
+                type: number
+              times:
+                type: array
+                items:
+                  type: string
+              photos:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    url:
+                      type: string
+
+    BuyTicketRequest:
+      type: object
+      properties:
+        place_id:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+      required:
+        - place_id
+        - timestamp
+
+    BuyTicketResponse:
+      type: object
+      properties:
+        response:
+          type: string
+
+    UserTokenRequest:
+      type: object
+      properties:
+        token:
+          type: string
+      required:
+        - token
+
+    UserTokenResponse:
+      type: object
+      properties:
+        response:
+          type: string
+
+    CategoriesResponse:
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            type: string
+
+    CharityResponse:
+      type: object
+      properties:
+        response:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              category:
+                type: string
+              name:
+                type: string
+              description:
+                type: string
+              organization:
+                type: string
+              phone:
+                type: string
+              website:
+                type: string
+              goal:
+                type: integer
+              current:
+                type: integer
+              photo:
+                type: string
+
+    DonateRequest:
+      type: object
+      properties:
+        collection_id:
+          type: integer
+        amount:
+          type: number
+      required:
+        - collection_id
+        - amount
+
+    DonateResponse:
+      type: object
+      properties:
+        response:
+          type: string
+
+    VotesResponse:
+      type: object
+      properties:
+        response:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              category:
+                type: string
+              name:
+                type: string
+              description:
+                type: string
+              organization:
+                type: string
+              end:
+                type: string
+                format: date-time
+              photo:
+                type: string
+              options:
+                type: array
+                items:
+                  type: string
+
+    VoteInfoResponse:
+      type: object
+      properties:
+        response:
+          type: object
+          properties:
+            id:
+              type: integer
+            category:
+              type: string
+            name:
+              type: string
+            description:
+              type: string
+            organization:
+              type: string
+            end:
+              type: string
+              format: date-time
+            photo:
+              type: string
+            options:
+              type: array
+              items:
+                type: string
+            stats:
+              type: object
+              additionalProperties:
+                type: integer
+            choice:
+              type: string
+
+    RateVoteRequest:
+      type: object
+      properties:
+        vote_id:
+          type: integer
+        rating:
+          type: integer
+          format: int32
+      required:
+        - vote_id
+        - rating
+
+    PetitionVoteRequest:
+      type: object
+      properties:
+        vote_id:
+          type: integer
+        support:
+          type: boolean
+      required:
+        - vote_id
+        - support
+
+    ChoiceVoteRequest:
+      type: object
+      properties:
+        vote_id:
+          type: integer
+        choice:
+          type: string
+      required:
+        - vote_id
+        - choice
+
+    VoteResponse:
+      type: object
+      properties:
+        response:
+          type: string
+
+    TicketsResponse:
+      type: object
+      properties:
+        response:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+              location:
+                type: string
+              event_time:
+                type: string
+                format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string

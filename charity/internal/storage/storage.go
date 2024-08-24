@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"log/slog"
 )
 
 type Collection struct {
@@ -22,35 +21,28 @@ type Collection struct {
 }
 
 type PostgresStorage struct {
-	DB     *pgxpool.Pool
-	logger *slog.Logger
+	db *pgxpool.Pool
 }
 
-func NewPostgresStorage(storagePath string, logger *slog.Logger) (*PostgresStorage, error) {
+func NewPostgresStorage(storagePath string) (*PostgresStorage, error) {
 	const op = "storage.postgresql.New"
-	logger.Info("Initializing PostgreSQL storage", slog.String("storagePath", storagePath))
 
 	dbpool, err := pgxpool.New(context.Background(), storagePath)
 	if err != nil {
-		logger.Error("Failed to create PostgreSQL connection pool", slog.String("operation", op), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	logger.Info("PostgreSQL storage initialized successfully")
-	return &PostgresStorage{DB: dbpool, logger: logger}, nil
+	return &PostgresStorage{db: dbpool}, nil
 }
 
 func (s *PostgresStorage) Close() {
-	s.logger.Info("Closing PostgreSQL connection pool")
-	s.DB.Close()
+	s.db.Close()
 }
 
 func (s *PostgresStorage) GetCategories(ctx context.Context) ([]string, error) {
 	const op = "storage.postgresql.GetCategories"
-	s.logger.Info("Fetching categories from database", slog.String("operation", op))
 
-	rows, err := s.DB.Query(ctx, "SELECT DISTINCT category FROM charity")
+	rows, err := s.db.Query(ctx, "SELECT DISTINCT category FROM charity")
 	if err != nil {
-		s.logger.Error("Failed to fetch categories", slog.String("operation", op), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	defer rows.Close()
@@ -59,34 +51,25 @@ func (s *PostgresStorage) GetCategories(ctx context.Context) ([]string, error) {
 	for rows.Next() {
 		var category string
 		if err := rows.Scan(&category); err != nil {
-			s.logger.Error("Failed to scan category row", slog.String("operation", op), slog.String("error", err.Error()))
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 		categories = append(categories, category)
 	}
 
 	if err := rows.Err(); err != nil {
-		s.logger.Error("Error occurred during row iteration", slog.String("operation", op), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	s.logger.Info("Categories fetched successfully", slog.Int("count", len(categories)))
 	return categories, nil
 }
 
 func (s *PostgresStorage) GetCollections(ctx context.Context) ([]*Collection, error) {
-	const op = "storage.postgresql.GetCollections"
 	query := "SELECT id, category, name, description, organization, phone, website, goal, current, photo FROM charity"
-	s.logger.Info("Fetching all collections from database", slog.String("operation", op))
-
 	return s.fetchCollections(ctx, query)
 }
 
 func (s *PostgresStorage) GetCollectionsByCategory(ctx context.Context, category string) ([]*Collection, error) {
-	const op = "storage.postgresql.GetCollectionsByCategory"
 	query := "SELECT id, category, name, description, organization, phone, website, goal, current, photo FROM charity WHERE category = $1"
-	s.logger.Info("Fetching collections by category", slog.String("operation", op), slog.String("category", category))
-
 	return s.fetchCollections(ctx, query, category)
 }
 
@@ -97,25 +80,20 @@ func (s *PostgresStorage) UpdateCollection(ctx context.Context, collectionId int
 		SET current = current + $1 
 		WHERE id = $2
 	`
-	s.logger.Info("Updating collection", slog.String("operation", op), slog.Int("collection_id", collectionId), slog.Int("amount", amount))
 
-	_, err := s.DB.Exec(ctx, query, amount, collectionId)
+	_, err := s.db.Exec(ctx, query, amount, collectionId)
 	if err != nil {
-		s.logger.Error("Failed to update collection", slog.String("operation", op), slog.String("error", err.Error()))
-		return fmt.Errorf("%s: failed to update collection: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	s.logger.Info("Collection updated successfully", slog.Int("collection_id", collectionId))
 	return nil
 }
 
 func (s *PostgresStorage) fetchCollections(ctx context.Context, query string, args ...interface{}) ([]*Collection, error) {
 	const op = "storage.postgresql.fetchCollections"
-	s.logger.Info("Executing query to fetch collections", slog.String("operation", op), slog.String("query", query))
 
-	rows, err := s.DB.Query(ctx, query, args...)
+	rows, err := s.db.Query(ctx, query, args...)
 	if err != nil {
-		s.logger.Error("Failed to execute query", slog.String("operation", op), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	defer rows.Close()
@@ -128,37 +106,54 @@ func (s *PostgresStorage) fetchCollections(ctx context.Context, query string, ar
 			&collection.Phone, &collection.Website, &collection.Goal, &collection.Current, &collection.Photo,
 		)
 		if err != nil {
-			s.logger.Error("Failed to scan collection row", slog.String("operation", op), slog.String("error", err.Error()))
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 		collections = append(collections, collection)
 	}
 
 	if err := rows.Err(); err != nil {
-		s.logger.Error("Error occurred during row iteration", slog.String("operation", op), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if len(collections) == 0 && len(args) > 0 {
-		s.logger.Warn("No collections found for the provided category", slog.String("category", args[0].(string)))
 		return nil, pgx.ErrNoRows
 	}
 
-	s.logger.Info("Collections fetched successfully", slog.Int("count", len(collections)))
 	return collections, nil
+}
+
+func (s *PostgresStorage) CreateTables(ctx context.Context) error {
+	const op = "storage.postgresql.CreateTables"
+	_, err := s.db.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS charity (
+			id SERIAL PRIMARY KEY,
+			category VARCHAR(255),
+			name TEXT,
+			description TEXT,
+			organization TEXT,
+			phone VARCHAR(50),
+			website VARCHAR(255),
+			goal INT,
+			current INT,
+			photo TEXT
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
 }
 
 func (s *PostgresStorage) FetchAndStoreData(ctx context.Context) error {
 	const op = "storage.postgresql.FetchAndStoreData"
 
 	var count int
-	err := s.DB.QueryRow(ctx, `SELECT COUNT(*) FROM charity`).Scan(&count)
+	err := s.db.QueryRow(ctx, `SELECT COUNT(*) FROM charity`).Scan(&count)
 	if err != nil {
-		return fmt.Errorf("failed to check existing data: %w", err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 
 	if count > 0 {
-		fmt.Println("Data already exists in the database. Skipping fetch and store.")
 		return nil
 	}
 
@@ -206,12 +201,12 @@ func (s *PostgresStorage) FetchAndStoreData(ctx context.Context) error {
 	}
 
 	for _, collection := range collections {
-		_, err := s.DB.Exec(ctx, `
+		_, err := s.db.Exec(ctx, `
 			INSERT INTO charity (category, name, description, organization, phone, website, goal, current, photo)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 			collection.Category, collection.Name, collection.Description, collection.Organization, collection.Phone, collection.Website, collection.Goal, collection.Current, collection.Photo)
 		if err != nil {
-			return fmt.Errorf("failed to insert data into table: %w", err)
+			return fmt.Errorf("%s: %w", op, err)
 		}
 	}
 

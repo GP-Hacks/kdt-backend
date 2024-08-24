@@ -1,7 +1,5 @@
 #!/bin/bash
 
-docker-compose build
-
 echo "Starting redis..."
 docker-compose up -d redis
 echo "redis started."

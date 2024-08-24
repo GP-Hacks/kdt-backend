@@ -1,8 +1,8 @@
 package tokens
 
 import (
-	"github.com/GP-Hack/kdt2024-commons/json"
-	"github.com/GP-Hack/kdt2024-gateway/internal/storage"
+	"github.com/GP-Hacks/kdt2024-commons/json"
+	"github.com/GP-Hacks/kdt2024-gateway/internal/storage"
 	"github.com/go-chi/chi/v5/middleware"
 	"log/slog"
 	"net/http"

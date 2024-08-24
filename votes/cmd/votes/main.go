@@ -2,8 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"github.com/GP-Hack/kdt2024-commons/prettylogger"
+	"github.com/GP-Hacks/kdt2024-commons/prettylogger"
 	"github.com/GP-Hacks/kdt2024-votes/config"
 	"github.com/GP-Hacks/kdt2024-votes/internal/grpc-server/handler"
 	"github.com/GP-Hacks/kdt2024-votes/internal/storage"
@@ -20,30 +19,20 @@ func main() {
 
 	grpcServer := grpc.NewServer()
 
+	log.Info("Starting TCP listener", slog.String("address", cfg.Address))
 	l, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
 		log.Error("Failed to start TCP listener for VotesService", slog.String("error", err.Error()), slog.String("address", cfg.Address))
 		return
 	}
-	defer closeListener(l, log)
+	defer func() {
+		if err := l.Close(); err != nil {
+			log.Error("Failed to close TCP listener", slog.String("error", err.Error()))
+		}
+	}()
+	log.Info("TCP listener started successfully", slog.String("address", cfg.Address))
 
-	storage, err := storage.NewPostgresStorage(cfg.PostgresAddress+"?sslmode=disable", log)
-	if err != nil {
-		log.Error("Failed to connect to PostgreSQL", slog.String("error", err.Error()), slog.String("postgres_address", cfg.PostgresAddress))
-		return
-	}
-	log.Info("PostgreSQL connected", slog.String("postgres_address", cfg.PostgresAddress))
-
-	if err := createTables(storage, log); err != nil {
-		log.Error("Error creating tables", slog.String("error", err.Error()))
-		return
-	}
-
-	if err := storage.FetchAndStoreData(context.Background()); err != nil {
-		log.Error("Failed to fetch and store initial data", slog.String("error", err.Error()))
-		return
-	}
-	log.Info("Initial data fetched and stored")
+	storage, err := setupPostgreSQL(cfg, log)
 
 	handler.NewGRPCHandler(cfg, grpcServer, storage, log)
 	if err := grpcServer.Serve(l); err != nil {
@@ -51,78 +40,25 @@ func main() {
 	}
 }
 
-func closeListener(l net.Listener, log *slog.Logger) {
-	if err := l.Close(); err != nil {
-		log.Error("Error closing TCP listener", slog.String("error", err.Error()))
-	} else {
-		log.Info("TCP listener closed")
+func setupPostgreSQL(cfg *config.Config, log *slog.Logger) (*storage.PostgresStorage, error) {
+	storage, err := storage.NewPostgresStorage(cfg.PostgresAddress + "?sslmode=disable")
+	if err != nil {
+		log.Error("Failed to connect to PostgreSQL", slog.String("error", err.Error()), slog.String("postgres_address", cfg.PostgresAddress))
+		return nil, err
 	}
-}
+	log.Info("PostgreSQL connected", slog.String("postgres_address", cfg.PostgresAddress))
 
-func createTables(storage *storage.PostgresStorage, log *slog.Logger) error {
-	tables := []struct {
-		name  string
-		query string
-	}{
-		{
-			name: "votes",
-			query: `
-				CREATE TABLE IF NOT EXISTS votes (
-					id SERIAL PRIMARY KEY,
-					category VARCHAR(255),
-					name TEXT,
-					description TEXT,
-					organization TEXT,
-					photo TEXT,
-					end_time TIMESTAMP
-				)`,
-		},
-		{
-			name: "options",
-			query: `
-				CREATE TABLE IF NOT EXISTS options (
-					vote_id INT REFERENCES votes(id) ON DELETE CASCADE,
-					option VARCHAR(255)
-				)`,
-		},
-		{
-			name: "rate_results",
-			query: `
-				CREATE TABLE IF NOT EXISTS rate_results (
-					vote_id INT REFERENCES votes(id) ON DELETE CASCADE,
-					user_token TEXT,
-					rate INT,
-					UNIQUE (vote_id, user_token)
-				)`,
-		},
-		{
-			name: "petition_results",
-			query: `
-				CREATE TABLE IF NOT EXISTS petition_results (
-					vote_id INT REFERENCES votes(id) ON DELETE CASCADE,
-					user_token TEXT,
-					support VARCHAR(50),
-					UNIQUE (vote_id, user_token)
-				)`,
-		},
-		{
-			name: "choices_results",
-			query: `
-				CREATE TABLE IF NOT EXISTS choices_results (
-					vote_id INT REFERENCES votes(id) ON DELETE CASCADE,
-					user_token TEXT,
-					choice TEXT,
-					UNIQUE (vote_id, user_token)
-				)`,
-		},
+	if err := storage.CreateTables(context.Background()); err != nil {
+		log.Error("Error creating tables", slog.String("error", err.Error()))
+		return nil, err
 	}
+	log.Info("Tables created or already exist")
 
-	for _, table := range tables {
-		_, err := storage.DB.Exec(context.Background(), table.query)
-		if err != nil {
-			return fmt.Errorf("failed to create table %s: %w", table.name, err)
-		}
-		log.Info("Table created or already exists", slog.String("table", table.name))
+	log.Info("Fetching and storing initial data")
+	if err := storage.FetchAndStoreData(context.Background()); err != nil {
+		log.Error("Failed to fetch and store initial data", slog.String("error", err.Error()))
+		return nil, err
 	}
-	return nil
+	log.Info("Initial data fetched and stored successfully")
+	return storage, nil
 }

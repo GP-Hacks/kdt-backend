@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/GP-Hack/kdt2024-commons/api/proto"
-	"github.com/GP-Hack/kdt2024-places/config"
-	"github.com/GP-Hack/kdt2024-places/internal/storage"
+	"github.com/GP-Hacks/kdt2024-commons/api/proto"
+	"github.com/GP-Hacks/kdt2024-places/config"
+	"github.com/GP-Hacks/kdt2024-places/internal/storage"
 	"github.com/jackc/pgx/v5"
 	"github.com/streadway/amqp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"log/slog"
 	"math"
 	"sort"
@@ -87,6 +88,35 @@ func (h *GRPCHandler) handleStorageError(err error, entity string) error {
 	}
 	h.logger.Error("Error occurred while retrieving "+entity, slog.String("entity", entity), slog.String("error", err.Error()))
 	return status.Errorf(codes.Internal, "An internal error occurred, please try again later")
+}
+
+func (h *GRPCHandler) GetTickets(ctx context.Context, request *proto.GetTicketsRequest) (*proto.GetTicketsResponse, error) {
+	h.logger.Debug("Processing GetTickets request", slog.Any("request", request))
+
+	select {
+	case <-ctx.Done():
+		h.logger.Warn("Request was cancelled by the client", slog.Any("request", request))
+		return nil, ctx.Err()
+	default:
+	}
+
+	userToken := request.GetToken()
+	tickets, err := h.storage.GetTickets(ctx, userToken)
+	if err != nil {
+		return nil, h.handleStorageError(err, "tickets")
+	}
+	var responseTickets []*proto.Ticket
+	for _, ticket := range tickets {
+		responseTickets = append(responseTickets, &proto.Ticket{
+			Id:        int32(ticket.ID),
+			Name:      ticket.Name,
+			Location:  ticket.Location,
+			Timestamp: timestamppb.New(ticket.EventTime),
+		})
+	}
+
+	h.logger.Info("Tickets retrieved successfully")
+	return &proto.GetTicketsResponse{Response: responseTickets}, nil
 }
 
 func (h *GRPCHandler) GetPlaces(ctx context.Context, request *proto.GetPlacesRequest) (*proto.GetPlacesResponse, error) {
@@ -212,6 +242,17 @@ func (h *GRPCHandler) BuyTicket(ctx context.Context, request *proto.BuyTicketReq
 		return nil, status.Errorf(codes.Internal, "An error occurred while processing your purchase")
 	}
 	h.logger.Info("Purchase message successfully published to RabbitMQ", slog.String("queue", h.cfg.QueuePurchases))
+
+	err = h.storage.SaveTicket(ctx, &storage.Ticket{
+		Name:      dbPlace.Name,
+		Location:  dbPlace.Location,
+		UserToken: request.GetToken(),
+		EventTime: request.GetTimestamp().AsTime(),
+	})
+	if err != nil {
+		h.logger.Error("Failed to save ticket", slog.Any("error", err.Error()))
+		return nil, status.Errorf(codes.Internal, "An error occurred while processing your purchase")
+	}
 
 	return &proto.BuyTicketResponse{
 		Response: "Ticket purchased successfully",

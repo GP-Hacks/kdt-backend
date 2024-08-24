@@ -10,10 +10,11 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"time"
 )
 
 type PostgresStorage struct {
-	DB *pgxpool.Pool
+	db *pgxpool.Pool
 }
 
 type Place struct {
@@ -30,6 +31,14 @@ type Place struct {
 	Time        string
 }
 
+type Ticket struct {
+	ID        int
+	Name      string
+	Location  string
+	UserToken string
+	EventTime time.Time
+}
+
 type Photo struct {
 	PlaceID int
 	Url     string
@@ -41,11 +50,11 @@ func NewPostgresStorage(storagePath string) (*PostgresStorage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: failed to create database connection pool: %w", op, err)
 	}
-	return &PostgresStorage{DB: dbpool}, nil
+	return &PostgresStorage{db: dbpool}, nil
 }
 
 func (s *PostgresStorage) Close() {
-	s.DB.Close()
+	s.db.Close()
 }
 
 func (s *PostgresStorage) GetPlaces(ctx context.Context) ([]*Place, error) {
@@ -72,7 +81,7 @@ func (s *PostgresStorage) GetPlaceById(ctx context.Context, placeID int) (*Place
 	const op = "storage.postgresql.GetPlaceById"
 	query := "SELECT id, category, description, latitude, longitude, location, name, tel, website, cost, time FROM places WHERE id = $1"
 	place := &Place{}
-	err := s.DB.QueryRow(ctx, query, placeID).Scan(
+	err := s.db.QueryRow(ctx, query, placeID).Scan(
 		&place.ID, &place.Category, &place.Description, &place.Latitude, &place.Longitude,
 		&place.Location, &place.Name, &place.Tel, &place.Website, &place.Cost, &place.Time,
 	)
@@ -88,7 +97,7 @@ func (s *PostgresStorage) GetPlaceById(ctx context.Context, placeID int) (*Place
 func (s *PostgresStorage) GetPhotosById(ctx context.Context, placeID int) ([]*Photo, error) {
 	const op = "storage.postgresql.GetPhotosById"
 	query := "SELECT place_id, url FROM photos WHERE place_id = $1"
-	rows, err := s.DB.Query(ctx, query, placeID)
+	rows, err := s.db.Query(ctx, query, placeID)
 	if err != nil {
 		return nil, fmt.Errorf("%s: failed to query photos for place ID %d: %w", op, placeID, err)
 	}
@@ -114,7 +123,7 @@ func (s *PostgresStorage) GetPhotosById(ctx context.Context, placeID int) ([]*Ph
 
 func (s *PostgresStorage) GetCategories(ctx context.Context) ([]string, error) {
 	const op = "storage.postgresql.GetCategories"
-	rows, err := s.DB.Query(ctx, "SELECT DISTINCT category FROM places")
+	rows, err := s.db.Query(ctx, "SELECT DISTINCT category FROM places")
 	if err != nil {
 		return nil, fmt.Errorf("%s: failed to query categories: %w", op, err)
 	}
@@ -139,9 +148,42 @@ func (s *PostgresStorage) GetCategories(ctx context.Context) ([]string, error) {
 	return categories, nil
 }
 
+func (s *PostgresStorage) GetTickets(ctx context.Context, userToken string) ([]*Ticket, error) {
+	const op = "storage.postgresql.GetTickets"
+	rows, err := s.db.Query(ctx, `SELECT id, name, location, user_token, event_time FROM tickets WHERE user_token = $1`, userToken)
+	if err != nil {
+		return nil, fmt.Errorf("%s: failed to query tickets: %w", op, err)
+	}
+	var tickets []*Ticket
+	for rows.Next() {
+		var ticket Ticket
+		if err := rows.Scan(&ticket.ID, &ticket.Name, &ticket.Location, &ticket.UserToken, &ticket.EventTime); err != nil {
+			return nil, fmt.Errorf("%s: failed to scan category: %w", op, err)
+		}
+		tickets = append(tickets, &ticket)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: error occurred while iterating over tickets: %w", op, err)
+	}
+
+	if len(tickets) == 0 {
+		return nil, pgx.ErrNoRows
+	}
+	return tickets, nil
+}
+
+func (s *PostgresStorage) SaveTicket(ctx context.Context, ticket *Ticket) error {
+	const op = "storage.postgresql.SaveTicket"
+	_, err := s.db.Exec(ctx, `INSERT INTO tickets (name, location, user_token, event_time) VALUES ($1, $2, $3, $4)`, ticket.Name, ticket.Location, ticket.UserToken, ticket.EventTime)
+	if err != nil {
+		return fmt.Errorf("%s: failed to save ticket: %w", op, err)
+	}
+	return nil
+}
+
 func (s *PostgresStorage) fetchPlaces(ctx context.Context, query string, args ...interface{}) ([]*Place, error) {
 	const op = "storage.postgresql.fetchPlaces"
-	rows, err := s.DB.Query(ctx, query, args...)
+	rows, err := s.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: failed to execute query: %w", op, err)
 	}
@@ -169,6 +211,43 @@ func (s *PostgresStorage) fetchPlaces(ctx context.Context, query string, args ..
 	return places, nil
 }
 
+func (s *PostgresStorage) CreateTables(ctx context.Context) error {
+	const op = "storage.postgresql.CreateTables"
+	tables := []string{
+		`CREATE TABLE IF NOT EXISTS places (
+			id SERIAL PRIMARY KEY,
+			category VARCHAR(255),
+			description TEXT,
+			latitude DOUBLE PRECISION,
+			longitude DOUBLE PRECISION,
+			location TEXT,
+			name VARCHAR(255),
+			tel VARCHAR(50),
+			website VARCHAR(255),
+			cost INT,
+			time VARCHAR(50)
+		)`,
+		`CREATE TABLE IF NOT EXISTS photos (
+			place_id INT REFERENCES places(id) ON DELETE CASCADE,
+			url TEXT
+		)`,
+		`CREATE TABLE IF NOT EXISTS tickets (
+			id SERIAL PRIMARY KEY,
+			name TEXT,
+			location TEXT,
+			user_token VARCHAR(255),
+			event_time TIMESTAMP
+		)`,
+	}
+
+	for _, table := range tables {
+		if _, err := s.db.Exec(ctx, table); err != nil {
+			return fmt.Errorf("%s: %w", op, err)
+		}
+	}
+	return nil
+}
+
 func (s *PostgresStorage) FetchAndStoreData(ctx context.Context) error {
 	const op = "storage.postgresql.FetchAndStoreData"
 	url := "https://api.foursquare.com/v3/places/search?categories=10001%2C10002%2C10004%2C10009%2C10027%2C10028%2C10029%2C10030%2C10031%2C10044%2C10046%2C10047%2C10056%2C10058%2C10059%2C10068%2C10069%2C16005%2C16011%2C16020%2C16025%2C16026%2C16031%2C16034%2C16035%2C16038%2C16039%2C16041%2C16046%2C16047%2C16052&exclude_all_chains=true&fields=categories%2Cname%2Cdescription%2Cgeocodes%2Clocation%2Ctel%2Cphotos%2Cwebsite&polygon=54.9887%2C48.0821~56.2968%2C49.1917~56.5096%2C50.3453~55.8923%2C51.4659~55.7380%2C54.0586~55.1836%2C53.0369~54.3534%2C53.2347~54.7675%2C51.1912~54.9193%2C49.2466~54.6405%2C48.6644&limit=50"
@@ -191,7 +270,7 @@ func (s *PostgresStorage) FetchAndStoreData(ctx context.Context) error {
 	}
 
 	var count int
-	err = s.DB.QueryRow(ctx, `SELECT COUNT(*) FROM places`).Scan(&count)
+	err = s.db.QueryRow(ctx, `SELECT COUNT(*) FROM places`).Scan(&count)
 	if err != nil {
 		return fmt.Errorf("%s: failed to count existing places: %w", op, err)
 	}
@@ -267,7 +346,7 @@ func (s *PostgresStorage) FetchAndStoreData(ctx context.Context) error {
 	fmt.Printf("Fetched %d places and %d photos from API\n", len(places), len(photos))
 
 	for _, place := range places {
-		_, err := s.DB.Exec(ctx, `
+		_, err := s.db.Exec(ctx, `
 			INSERT INTO places (category, description, latitude, longitude, location, name, tel, website, cost, time)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 			place.Category, place.Description, place.Latitude, place.Longitude, place.Location, place.Name, place.Tel, place.Website, place.Cost, place.Time)
@@ -277,7 +356,7 @@ func (s *PostgresStorage) FetchAndStoreData(ctx context.Context) error {
 	}
 
 	for _, photo := range photos {
-		_, err := s.DB.Exec(ctx, `INSERT INTO photos (place_id, url) VALUES ($1, $2)`, photo.PlaceID, photo.Url)
+		_, err := s.db.Exec(ctx, `INSERT INTO photos (place_id, url) VALUES ($1, $2)`, photo.PlaceID, photo.Url)
 		if err != nil {
 			return fmt.Errorf("%s: failed to insert photo into database: %w", op, err)
 		}

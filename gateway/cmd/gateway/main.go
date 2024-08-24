@@ -1,25 +1,26 @@
 package main
 
 import (
+	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/charity"
+	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/chat"
+	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/tokens"
 	"log/slog"
 	"net/http"
 	"os"
 
-	"github.com/GP-Hack/kdt2024-commons/api/proto"
-	"github.com/GP-Hack/kdt2024-commons/prettylogger"
-	"github.com/GP-Hack/kdt2024-gateway/config"
-	charityclient "github.com/GP-Hack/kdt2024-gateway/internal/grpc-clients/charity"
-	chatclient "github.com/GP-Hack/kdt2024-gateway/internal/grpc-clients/chat"
-	placesclient "github.com/GP-Hack/kdt2024-gateway/internal/grpc-clients/places"
-	votesclient "github.com/GP-Hack/kdt2024-gateway/internal/grpc-clients/votes"
-	"github.com/GP-Hack/kdt2024-gateway/internal/http-server/handlers/charity"
-	"github.com/GP-Hack/kdt2024-gateway/internal/http-server/handlers/chat"
-	"github.com/GP-Hack/kdt2024-gateway/internal/http-server/handlers/places"
-	"github.com/GP-Hack/kdt2024-gateway/internal/http-server/handlers/tokens"
-	"github.com/GP-Hack/kdt2024-gateway/internal/http-server/handlers/votes"
-	"github.com/GP-Hack/kdt2024-gateway/internal/storage"
+	"github.com/GP-Hacks/kdt2024-commons/api/proto"
+	"github.com/GP-Hacks/kdt2024-commons/prettylogger"
+	"github.com/GP-Hacks/kdt2024-gateway/config"
+	charityclient "github.com/GP-Hacks/kdt2024-gateway/internal/grpc-clients/charity"
+	chatclient "github.com/GP-Hacks/kdt2024-gateway/internal/grpc-clients/chat"
+	placesclient "github.com/GP-Hacks/kdt2024-gateway/internal/grpc-clients/places"
+	votesclient "github.com/GP-Hacks/kdt2024-gateway/internal/grpc-clients/votes"
+	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/places"
+	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/votes"
+	"github.com/GP-Hacks/kdt2024-gateway/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 func main() {
@@ -58,7 +59,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	router := setupRouter(log, chatClient, placesClient, charityClient, votesClient)
+	router := setupRouter(cfg, log, chatClient, placesClient, charityClient, votesClient)
 	startServer(cfg, router, log)
 }
 
@@ -112,26 +113,43 @@ func setupVotesClient(cfg *config.Config, log *slog.Logger) (proto.VotesServiceC
 	return client, nil
 }
 
-func setupRouter(log *slog.Logger, chatClient proto.ChatServiceClient, placesClient proto.PlacesServiceClient, charityClient proto.CharityServiceClient, votesClient proto.VotesServiceClient) *chi.Mux {
+func setupRouter(cfg *config.Config, log *slog.Logger, chatClient proto.ChatServiceClient, placesClient proto.PlacesServiceClient, charityClient proto.CharityServiceClient, votesClient proto.VotesServiceClient) *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
 
+	router.Get("/swagger", func(w http.ResponseWriter, r *http.Request) {
+		yamlFile, err := os.ReadFile("/root/swagger.yaml")
+		if err != nil {
+			http.Error(w, "Unable to read swagger.yaml", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write(yamlFile)
+	})
+
+	router.Get("/api/docs/*", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8086/swagger"),
+	),
+	)
+
 	router.Post("/api/chat/ask", chat.NewSendMessageHandler(log, chatClient))
-	router.Post("/api/places/get", places.NewGetPlacesHandler(log, placesClient))
-	router.Post("/api/places/buy", places.NewBuyTicketHandler(log, placesClient))
-	router.Get("/api/places/categories", places.NewGetCategoriesHandler(log, placesClient))
-
-	router.Post("/api/charity/get", charity.NewGetCollectionsHandler(log, charityClient))
-	router.Post("/api/charity/donate", charity.NewDonateHandler(log, charityClient))
-	router.Get("/api/charity/categories", charity.NewGetCategoriesHandler(log, charityClient))
-
 	router.Post("/api/user/token", tokens.NewAddTokenHandler(log))
 
+	router.Post("/api/places", places.NewGetPlacesHandler(log, placesClient))
+	router.Get("/api/places/categories", places.NewGetCategoriesHandler(log, placesClient))
+	router.Get("/api/places/tickets", places.NewGetTicketsHandler(log, placesClient))
+	router.Post("/api/places/buy", places.NewBuyTicketHandler(log, placesClient))
+
+	router.Get("/api/charity", charity.NewGetCollectionsHandler(log, charityClient))
+	router.Get("/api/charity/categories", charity.NewGetCategoriesHandler(log, charityClient))
+	router.Post("/api/charity/donate", charity.NewDonateHandler(log, charityClient))
+
 	router.Get("/api/votes", votes.NewGetVotesHandler(log, votesClient))
-	router.Post("/api/votes/get", votes.NewGetVoteInfoHandler(log, votesClient))
+	router.Get("/api/votes/categories", votes.NewGetCategoriesHandler(log, votesClient))
+	router.Get("/api/votes/info", votes.NewGetVoteInfoHandler(log, votesClient))
 	router.Post("/api/votes/rate", votes.NewVoteRateHandler(log, votesClient))
 	router.Post("/api/votes/petition", votes.NewVotePetitionHandler(log, votesClient))
 	router.Post("/api/votes/choice", votes.NewVoteChoiceHandler(log, votesClient))

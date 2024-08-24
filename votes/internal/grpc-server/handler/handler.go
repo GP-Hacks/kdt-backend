@@ -2,7 +2,7 @@ package handler
 
 import (
 	"context"
-	"github.com/GP-Hack/kdt2024-commons/api/proto"
+	"github.com/GP-Hacks/kdt2024-commons/api/proto"
 	"github.com/GP-Hacks/kdt2024-votes/config"
 	"github.com/GP-Hacks/kdt2024-votes/internal/storage"
 	"google.golang.org/grpc"
@@ -29,9 +29,24 @@ func NewGRPCHandler(cfg *config.Config, server *grpc.Server, storage *storage.Po
 func (h *GRPCHandler) GetVotes(ctx context.Context, request *proto.GetVotesRequest) (*proto.GetVotesResponse, error) {
 	h.logger.Debug("Received GetVotes request", slog.Any("request", request))
 
-	votes, err := h.storage.GetVotes(ctx)
+	select {
+	case <-ctx.Done():
+		h.logger.Warn("GetVotes request was cancelled by client")
+		return nil, status.Errorf(codes.Canceled, "Request was cancelled")
+	default:
+	}
+
+	var votes []*storage.Vote
+	var err error
+
+	category := request.GetCategory()
+	if category == "all" {
+		votes, err = h.storage.GetVotes(ctx)
+	} else {
+		votes, err = h.storage.GetVotesByCategory(ctx, category)
+	}
 	if err != nil {
-		return nil, h.handleStorageError(err, "fetching votes")
+		return nil, h.handleStorageError(err, "votes")
 	}
 
 	var protoVotes []*proto.Vote
@@ -48,19 +63,59 @@ func (h *GRPCHandler) GetVotes(ctx context.Context, request *proto.GetVotesReque
 		})
 	}
 
-	h.logger.Info("Successfully retrieved votes", slog.Int("count", len(protoVotes)))
 	return &proto.GetVotesResponse{Response: protoVotes}, nil
+}
+
+func (h *GRPCHandler) GetCategories(ctx context.Context, request *proto.GetCategoriesRequest) (*proto.GetCategoriesResponse, error) {
+	h.logger.Debug("Received GetCategories request", slog.Any("request", request))
+
+	select {
+	case <-ctx.Done():
+		h.logger.Warn("GetCategories request was cancelled by client")
+		return nil, status.Errorf(codes.Canceled, "Request was cancelled")
+	default:
+	}
+
+	categories, err := h.storage.GetCategories(ctx)
+	if err != nil {
+		return nil, h.handleStorageError(err, "categories")
+	}
+
+	return &proto.GetCategoriesResponse{Categories: categories}, nil
 }
 
 func (h *GRPCHandler) GetRateInfo(ctx context.Context, request *proto.GetVoteInfoRequest) (*proto.GetRateInfoResponse, error) {
 	h.logger.Debug("Received GetRateInfo request", slog.Any("request", request))
+
+	select {
+	case <-ctx.Done():
+		h.logger.Warn("GetRateInfo request was cancelled by client")
+		return nil, status.Errorf(codes.Canceled, "Request was cancelled")
+	default:
+	}
+
+	rates, err := h.storage.GetUserRates(ctx, request.Token)
+	if err != nil {
+		return nil, h.handleStorageError(err, "rates")
+	}
+	var urate *storage.UserRate
+	if len(rates) != 0 {
+		for _, rate := range rates {
+			if int32(rate.ID) == request.VoteId {
+				urate = rate
+			}
+		}
+	}
+	var xxx float32
+	if urate != nil {
+		xxx = float32(urate.Rate)
+	}
 
 	rateInfo, err := h.storage.GetRateInfo(ctx, int(request.VoteId))
 	if err != nil {
 		return nil, h.handleStorageError(err, "fetching rate info")
 	}
 
-	h.logger.Info("Successfully retrieved rate info", slog.Int("vote_id", int(request.VoteId)))
 	return &proto.GetRateInfoResponse{
 		Response: &proto.VoteInfo{
 			Id:           int32(rateInfo.ID),
@@ -72,6 +127,7 @@ func (h *GRPCHandler) GetRateInfo(ctx context.Context, request *proto.GetVoteInf
 			Options:      rateInfo.Options,
 			Photo:        rateInfo.Photo,
 			Mid:          float32(rateInfo.Mid),
+			Rate:         xxx,
 		},
 	}, nil
 }
@@ -79,12 +135,29 @@ func (h *GRPCHandler) GetRateInfo(ctx context.Context, request *proto.GetVoteInf
 func (h *GRPCHandler) GetPetitionInfo(ctx context.Context, request *proto.GetVoteInfoRequest) (*proto.GetPetitionInfoResponse, error) {
 	h.logger.Debug("Received GetPetitionInfo request", slog.Any("request", request))
 
+	petitions, err := h.storage.GetUserPetitions(ctx, request.Token)
+	if err != nil {
+		return nil, h.handleStorageError(err, "petitions")
+	}
+	var upet *storage.UserPetition
+	if len(petitions) != 0 {
+		for _, pet := range petitions {
+			if int32(pet.ID) == request.VoteId {
+				upet = pet
+			}
+		}
+	}
+
+	var xxx string
+	if upet != nil {
+		xxx = upet.Support
+	}
+
 	petitionInfo, err := h.storage.GetPetitionInfo(ctx, int(request.VoteId))
 	if err != nil {
 		return nil, h.handleStorageError(err, "fetching petition info")
 	}
 
-	h.logger.Info("Successfully retrieved petition info", slog.Int("vote_id", int(request.VoteId)))
 	return &proto.GetPetitionInfoResponse{
 		Response: &proto.PetitionInfo{
 			Id:           int32(petitionInfo.ID),
@@ -96,6 +169,7 @@ func (h *GRPCHandler) GetPetitionInfo(ctx context.Context, request *proto.GetVot
 			Options:      petitionInfo.Options,
 			Photo:        petitionInfo.Photo,
 			Stats:        petitionInfo.Stats,
+			Support:      xxx,
 		},
 	}, nil
 }
@@ -103,12 +177,30 @@ func (h *GRPCHandler) GetPetitionInfo(ctx context.Context, request *proto.GetVot
 func (h *GRPCHandler) GetChoiceInfo(ctx context.Context, request *proto.GetVoteInfoRequest) (*proto.GetChoiceInfoResponse, error) {
 	h.logger.Debug("Received GetChoiceInfo request", slog.Any("request", request))
 
+	choices, err := h.storage.GetUserChoices(ctx, request.Token)
+
+	if err != nil {
+		return nil, h.handleStorageError(err, "choices")
+	}
+	var uchoice *storage.UserChoice
+	if len(choices) != 0 {
+		for _, choice := range choices {
+			if int32(choice.ID) == request.VoteId {
+				uchoice = choice
+			}
+		}
+	}
+
+	var xxx string
+	if uchoice != nil {
+		xxx = uchoice.Choice
+	}
+
 	choiceInfo, err := h.storage.GetChoiceInfo(ctx, int(request.VoteId))
 	if err != nil {
 		return nil, h.handleStorageError(err, "fetching choice info")
 	}
 
-	h.logger.Info("Successfully retrieved choice info", slog.Int("vote_id", int(request.VoteId)))
 	return &proto.GetChoiceInfoResponse{
 		Response: &proto.ChoiceInfo{
 			Id:           int32(choiceInfo.ID),
@@ -120,6 +212,7 @@ func (h *GRPCHandler) GetChoiceInfo(ctx context.Context, request *proto.GetVoteI
 			Options:      choiceInfo.Options,
 			Photo:        choiceInfo.Photo,
 			Stats:        choiceInfo.Stats,
+			Choice:       xxx,
 		},
 	}, nil
 }

@@ -1,9 +1,8 @@
 package places
 
 import (
-	"fmt"
-	"github.com/GP-Hack/kdt2024-commons/api/proto"
-	"github.com/GP-Hack/kdt2024-commons/json"
+	"github.com/GP-Hacks/kdt2024-commons/api/proto"
+	"github.com/GP-Hacks/kdt2024-commons/json"
 	"github.com/go-chi/chi/v5/middleware"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -78,18 +77,15 @@ func NewGetPlacesHandler(log *slog.Logger, placesClient proto.PlacesServiceClien
 		default:
 		}
 
-		var request proto.GetPlacesRequest
-		if err := json.ReadJSON(r, &request); err != nil {
-			logger.Error("Failed to parse JSON request", slog.String("error", err.Error()))
-			json.WriteError(w, http.StatusBadRequest, "Invalid JSON input")
+		category := r.URL.Query().Get("category")
+
+		if category == "" {
+			logger.Warn("Invalid category parameter")
+			json.WriteError(w, http.StatusBadRequest, "Invalid category parameter")
 			return
 		}
 
-		if err := validateRequest(&request); err != nil {
-			logger.Warn("Invalid request parameters", slog.String("error", err.Error()))
-			json.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
+		request := proto.GetPlacesRequest{Category: category}
 
 		resp, err := placesClient.GetPlaces(ctx, &request)
 		if err != nil {
@@ -107,17 +103,4 @@ func NewGetPlacesHandler(log *slog.Logger, placesClient proto.PlacesServiceClien
 		logger.Debug("Places successfully retrieved", slog.Any("response", response))
 		json.WriteJSON(w, http.StatusOK, response)
 	}
-}
-
-func validateRequest(request *proto.GetPlacesRequest) error {
-	if request.GetCategory() == "" {
-		return fmt.Errorf("category field cannot be empty")
-	}
-	if request.GetLatitude() == 0 {
-		return fmt.Errorf("latitude field cannot be zero")
-	}
-	if request.GetLongitude() == 0 {
-		return fmt.Errorf("longitude field cannot be zero")
-	}
-	return nil
 }

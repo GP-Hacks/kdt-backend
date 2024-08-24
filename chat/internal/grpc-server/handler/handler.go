@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/GP-Hack/kdt2024-chat/internal/storage"
-	"github.com/GP-Hack/kdt2024-commons/api/proto"
+	"github.com/GP-Hacks/kdt2024-chat/internal/storage"
+	"github.com/GP-Hacks/kdt2024-commons/api/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -42,12 +42,12 @@ func NewGRPCHandler(server *grpc.Server, storage *storage.RedisStorage, logger *
 }
 
 func (h *GRPCHandler) SendMessage(ctx context.Context, req *proto.SendMessageRequest) (*proto.SendMessageResponse, error) {
-	h.logger.Info("Processing SendMessage request", slog.Any("request", req))
+	h.logger.Debug("Received SendMessage request", slog.Any("request", req))
 
 	select {
 	case <-ctx.Done():
-		h.logger.Warn("SendMessage request was cancelled", slog.String("reason", ctx.Err().Error()))
-		return nil, ctx.Err()
+		h.logger.Warn("SendMessage request was cancelled by client")
+		return nil, status.Errorf(codes.Canceled, "Request was cancelled")
 	default:
 	}
 
@@ -78,7 +78,9 @@ func (h *GRPCHandler) SendMessage(ctx context.Context, req *proto.SendMessageReq
 }
 
 func (h *GRPCHandler) HealthCheck(ctx context.Context, req *proto.HealthCheckRequest) (*proto.HealthCheckResponse, error) {
-	h.logger.Info("Processing HealthCheck request")
+	h.logger.Debug("Received HealthCheck request")
+
+	h.logger.Info("HealthCheck passed")
 	return &proto.HealthCheckResponse{IsHealthy: true}, nil
 }
 

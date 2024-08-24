@@ -29,11 +29,38 @@ message HealthCheckResponse {
   bool is_healthy = 1;
 }
 
+
+
+
+
+
+
+
+
+
+
+
 service PlacesService {
   rpc GetPlaces(GetPlacesRequest) returns (GetPlacesResponse);
   rpc GetCategories(GetCategoriesRequest) returns (GetCategoriesResponse);
   rpc BuyTicket(BuyTicketRequest) returns (BuyTicketResponse);
+  rpc GetTickets(GetTicketsRequest) returns (GetTicketsResponse);
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message GetTicketsRequest {
+  string token = 1;
+}
+
+message GetTicketsResponse {
+  repeated Ticket response = 1;
+}
+
+message Ticket {
+  int32 id = 1;
+  string name = 2;
+  string location = 3;
+  google.protobuf.Timestamp timestamp = 4;
 }
 
 message GetPlacesRequest {
@@ -81,6 +108,18 @@ message BuyTicketResponse {
   string response = 1;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
 service CharityService {
   rpc GetCollections(GetCollectionsRequest) returns (GetCollectionsResponse);
   rpc GetCategories(GetCategoriesRequest) returns (GetCategoriesResponse);
@@ -120,8 +159,22 @@ message DonateResponse {
 }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 service VotesService {
   rpc GetVotes(GetVotesRequest) returns (GetVotesResponse);
+  rpc GetCategories(GetCategoriesRequest) returns (GetCategoriesResponse);
   rpc GetRateInfo(GetVoteInfoRequest) returns (GetRateInfoResponse);
   rpc GetPetitionInfo(GetVoteInfoRequest) returns (GetPetitionInfoResponse);
   rpc GetChoiceInfo(GetVoteInfoRequest) returns (GetChoiceInfoResponse);
@@ -133,7 +186,9 @@ service VotesService {
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
 }
 
-message GetVotesRequest {}
+message GetVotesRequest {
+  string category = 1;
+}
 
 message GetVotesResponse {
   repeated Vote response = 1;
@@ -152,6 +207,7 @@ message Vote {
 
 message GetVoteInfoRequest {
   int32 vote_id = 1;
+  string token = 2;
 }
 
 message GetRateInfoResponse {
@@ -176,6 +232,7 @@ message VoteInfo {
   repeated string options = 7;
   string photo = 8;
   float mid = 9;
+  float rate = 10;
 }
 
 message PetitionInfo {
@@ -188,6 +245,7 @@ message PetitionInfo {
   repeated string options = 7;
   string photo = 8;
   map<string, int32> stats = 9;
+  string support = 10;
 }
 
 message ChoiceInfo {
@@ -200,6 +258,7 @@ message ChoiceInfo {
   repeated string options = 7;
   string photo = 8;
   map<string, int32> stats = 9;
+  string choice = 10;
 }
 
 message VoteRateRequest {

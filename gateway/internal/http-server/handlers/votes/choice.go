@@ -2,8 +2,8 @@ package votes
 
 import (
 	"fmt"
-	"github.com/GP-Hack/kdt2024-commons/api/proto"
-	"github.com/GP-Hack/kdt2024-commons/json"
+	"github.com/GP-Hacks/kdt2024-commons/api/proto"
+	"github.com/GP-Hacks/kdt2024-commons/json"
 	"github.com/go-chi/chi/v5/middleware"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,6 +26,7 @@ type ChoiceInfoWithDefault struct {
 	Photo        string         `json:"photo"`
 	Options      []string       `json:"options"`
 	Stats        map[string]int `json:"stats"`
+	Choice       string         `json:"choice,omitempty"`
 }
 
 func withDefaultChoiceInfo(resp *proto.GetChoiceInfoResponse) *GetChoiceInfoResponseWithDefault {
@@ -45,6 +46,7 @@ func withDefaultChoiceInfo(resp *proto.GetChoiceInfoResponse) *GetChoiceInfoResp
 			Photo:        resp.GetResponse().Photo,
 			Options:      resp.GetResponse().Options,
 			Stats:        stats,
+			Choice:       resp.GetResponse().Choice,
 		},
 	}
 }

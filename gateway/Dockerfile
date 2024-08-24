@@ -14,6 +14,7 @@ FROM alpine:latest
 WORKDIR /root/
 
 COPY --from=builder /app/gateway/cmd/gateway/gateway_service .
+COPY --from=builder /app/gateway/cmd/docs/swagger.yaml .
 
 EXPOSE 8080
 

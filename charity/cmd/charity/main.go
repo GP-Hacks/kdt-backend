@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"github.com/GP-Hack/kdt2024-commons/prettylogger"
 	"github.com/GP-Hacks/kdt2024-charity/config"
 	"github.com/GP-Hacks/kdt2024-charity/internal/grpc-server/handler"
 	"github.com/GP-Hacks/kdt2024-charity/internal/storage"
+	"github.com/GP-Hacks/kdt2024-commons/prettylogger"
 	"github.com/streadway/amqp"
 	"google.golang.org/grpc"
 	"log/slog"
@@ -16,13 +16,14 @@ func main() {
 	cfg := config.MustLoad()
 	log := prettylogger.SetupLogger(cfg.Env)
 	log.Info("Configuration and logger initialized", slog.String("environment", cfg.Env))
+	log.Info("Logger initialized")
 
 	grpcServer := grpc.NewServer()
 
 	log.Info("Starting TCP listener", slog.String("address", cfg.Address))
 	l, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
-		log.Error("Failed to start TCP listener", slog.String("error", err.Error()), slog.String("address", cfg.Address))
+		log.Error("Failed to start TCP listener for CharityService", slog.String("error", err.Error()), slog.String("address", cfg.Address))
 		return
 	}
 	defer func() {
@@ -32,16 +33,8 @@ func main() {
 	}()
 	log.Info("TCP listener started successfully", slog.String("address", cfg.Address))
 
-	storage, err := initializePostgres(cfg, log)
+	storage, err := setupPostgreSQL(cfg, log)
 	if err != nil {
-		return
-	}
-
-	if err := setupCharityTable(storage, log); err != nil {
-		return
-	}
-
-	if err := fetchDataAndStore(storage, log); err != nil {
 		return
 	}
 
@@ -62,49 +55,27 @@ func main() {
 	serveGRPC(grpcServer, l, log, cfg)
 }
 
-func initializePostgres(cfg *config.Config, log *slog.Logger) (*storage.PostgresStorage, error) {
-	log.Info("Connecting to Postgres", slog.String("address", cfg.PostgresAddress))
-	pgStorage, err := storage.NewPostgresStorage(cfg.PostgresAddress+"?sslmode=disable", log)
+func setupPostgreSQL(cfg *config.Config, log *slog.Logger) (*storage.PostgresStorage, error) {
+	storage, err := storage.NewPostgresStorage(cfg.PostgresAddress + "?sslmode=disable")
 	if err != nil {
-		log.Error("Failed to connect to Postgres", slog.String("error", err.Error()), slog.String("address", cfg.PostgresAddress))
+		log.Error("Failed to connect to PostgreSQL", slog.String("error", err.Error()), slog.String("postgres_address", cfg.PostgresAddress))
 		return nil, err
 	}
-	log.Info("Postgres connection established successfully", slog.String("address", cfg.PostgresAddress))
-	return pgStorage, nil
-}
+	log.Info("PostgreSQL connected", slog.String("postgres_address", cfg.PostgresAddress))
 
-func setupCharityTable(pgStorage *storage.PostgresStorage, log *slog.Logger) error {
-	log.Info("Ensuring charity table exists")
-	_, err := pgStorage.DB.Exec(context.Background(), `
-		CREATE TABLE IF NOT EXISTS charity (
-			id SERIAL PRIMARY KEY,
-			category VARCHAR(255),
-			name TEXT,
-			description TEXT,
-			organization TEXT,
-			phone VARCHAR(50),
-			website VARCHAR(255),
-			goal INT,
-			current INT,
-			photo TEXT
-		)
-	`)
-	if err != nil {
-		log.Error("Failed to create charity table", slog.String("error", err.Error()))
-		return err
+	if err := storage.CreateTables(context.Background()); err != nil {
+		log.Error("Error creating tables", slog.String("error", err.Error()))
+		return nil, err
 	}
-	log.Info("Charity table created or already exists")
-	return nil
-}
+	log.Info("Tables created or already exist")
 
-func fetchDataAndStore(pgStorage *storage.PostgresStorage, log *slog.Logger) error {
 	log.Info("Fetching and storing initial data")
-	if err := pgStorage.FetchAndStoreData(context.Background()); err != nil {
+	if err := storage.FetchAndStoreData(context.Background()); err != nil {
 		log.Error("Failed to fetch and store initial data", slog.String("error", err.Error()))
-		return err
+		return nil, err
 	}
 	log.Info("Initial data fetched and stored successfully")
-	return nil
+	return storage, nil
 }
 
 func setupRabbitMQ(cfg *config.Config, log *slog.Logger) (*amqp.Connection, *amqp.Channel, error) {

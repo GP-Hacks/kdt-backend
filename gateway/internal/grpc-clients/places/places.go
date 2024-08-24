@@ -3,7 +3,7 @@ package grpc_clients
 import (
 	"context"
 	"fmt"
-	"github.com/GP-Hack/kdt2024-commons/api/proto"
+	"github.com/GP-Hacks/kdt2024-commons/api/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"log/slog"

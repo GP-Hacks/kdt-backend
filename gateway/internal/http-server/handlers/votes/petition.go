@@ -1,8 +1,8 @@
 package votes
 
 import (
-	"github.com/GP-Hack/kdt2024-commons/api/proto"
-	"github.com/GP-Hack/kdt2024-commons/json"
+	"github.com/GP-Hacks/kdt2024-commons/api/proto"
+	"github.com/GP-Hacks/kdt2024-commons/json"
 	"github.com/go-chi/chi/v5/middleware"
 	"log/slog"
 	"net/http"
@@ -23,6 +23,7 @@ type PetitionInfoWithDefault struct {
 	Photo        string         `json:"photo"`
 	Options      []string       `json:"options"`
 	Stats        map[string]int `json:"stats"`
+	Support      string         `json:"support,omitempty"`
 }
 
 func withDefaultPetitionInfo(resp *proto.GetPetitionInfoResponse) *GetPetitionInfoResponseWithDefault {
@@ -42,6 +43,7 @@ func withDefaultPetitionInfo(resp *proto.GetPetitionInfoResponse) *GetPetitionIn
 			Photo:        resp.GetResponse().Photo,
 			Options:      resp.GetResponse().Options,
 			Stats:        stats,
+			Support:      resp.GetResponse().Support,
 		},
 	}
 }

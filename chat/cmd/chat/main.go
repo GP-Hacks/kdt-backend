@@ -4,10 +4,10 @@ import (
 	"context"
 	"net"
 
-	"github.com/GP-Hack/kdt2024-chat/config"
-	"github.com/GP-Hack/kdt2024-chat/internal/grpc-server/handler"
-	"github.com/GP-Hack/kdt2024-chat/internal/storage"
-	"github.com/GP-Hack/kdt2024-commons/prettylogger"
+	"github.com/GP-Hacks/kdt2024-chat/config"
+	"github.com/GP-Hacks/kdt2024-chat/internal/grpc-server/handler"
+	"github.com/GP-Hacks/kdt2024-chat/internal/storage"
+	"github.com/GP-Hacks/kdt2024-commons/prettylogger"
 	"google.golang.org/grpc"
 	"log/slog"
 )

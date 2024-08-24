@@ -6,9 +6,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/GP-Hack/kdt2024-commons/api/proto"
 	"github.com/GP-Hacks/kdt2024-charity/config"
 	"github.com/GP-Hacks/kdt2024-charity/internal/storage"
+	"github.com/GP-Hacks/kdt2024-commons/api/proto"
 	"github.com/jackc/pgx/v5"
 	"github.com/streadway/amqp"
 	"google.golang.org/grpc"
@@ -35,11 +35,12 @@ type GRPCHandler struct {
 func NewGRPCHandler(cfg *config.Config, server *grpc.Server, storage *storage.PostgresStorage, logger *slog.Logger, mqch *amqp.Channel) *GRPCHandler {
 	handler := &GRPCHandler{cfg: cfg, storage: storage, logger: logger, mqch: mqch}
 	proto.RegisterCharityServiceServer(server, handler)
+	logger.Info("GRPCHandler initialized", slog.String("address", cfg.Address))
 	return handler
 }
 
 func (h *GRPCHandler) GetCollections(ctx context.Context, request *proto.GetCollectionsRequest) (*proto.GetCollectionsResponse, error) {
-	h.logger.Debug("Processing GetCollections request", slog.String("category", request.GetCategory()))
+	h.logger.Debug("Received GetCollections request", slog.Any("request", request))
 
 	select {
 	case <-ctx.Done():
@@ -53,18 +54,14 @@ func (h *GRPCHandler) GetCollections(ctx context.Context, request *proto.GetColl
 
 	category := request.GetCategory()
 	if category == "all" {
-		h.logger.Info("Fetching all collections from database")
 		collections, err = h.storage.GetCollections(ctx)
 	} else {
-		h.logger.Info("Fetching collections by category", slog.String("category", category))
 		collections, err = h.storage.GetCollectionsByCategory(ctx, category)
 	}
 
 	if err != nil {
 		return nil, h.handleStorageError(err, "collections")
 	}
-
-	h.logger.Info("Successfully fetched collections", slog.Int("count", len(collections)))
 
 	var responseCollections []*proto.Collection
 	for _, collection := range collections {
@@ -86,7 +83,7 @@ func (h *GRPCHandler) GetCollections(ctx context.Context, request *proto.GetColl
 }
 
 func (h *GRPCHandler) GetCategories(ctx context.Context, request *proto.GetCategoriesRequest) (*proto.GetCategoriesResponse, error) {
-	h.logger.Debug("Processing GetCategories request")
+	h.logger.Debug("Received GetCategories request", slog.Any("request", request))
 
 	select {
 	case <-ctx.Done():
@@ -95,19 +92,16 @@ func (h *GRPCHandler) GetCategories(ctx context.Context, request *proto.GetCateg
 	default:
 	}
 
-	h.logger.Info("Fetching categories from database")
 	categories, err := h.storage.GetCategories(ctx)
 	if err != nil {
 		return nil, h.handleStorageError(err, "categories")
 	}
 
-	h.logger.Info("Successfully fetched categories", slog.Int("count", len(categories)))
-
 	return &proto.GetCategoriesResponse{Categories: categories}, nil
 }
 
 func (h *GRPCHandler) Donate(ctx context.Context, request *proto.DonateRequest) (*proto.DonateResponse, error) {
-	h.logger.Debug("Processing Donate request", slog.String("user_token", request.GetToken()), slog.Int("collection_id", int(request.GetCollectionId())), slog.Int("amount", int(request.GetAmount())))
+	h.logger.Debug("Received Donate request", slog.Any("request", request))
 
 	select {
 	case <-ctx.Done():
@@ -143,10 +137,10 @@ func (h *GRPCHandler) Donate(ctx context.Context, request *proto.DonateRequest) 
 }
 
 func (h *GRPCHandler) HealthCheck(ctx context.Context, req *proto.HealthCheckRequest) (*proto.HealthCheckResponse, error) {
-	h.logger.Debug("Processing HealthCheck request")
-	return &proto.HealthCheckResponse{
-		IsHealthy: true,
-	}, nil
+	h.logger.Debug("Received HealthCheck request")
+
+	h.logger.Info("HealthCheck passed")
+	return &proto.HealthCheckResponse{IsHealthy: true}, nil
 }
 
 func (h *GRPCHandler) publishToRabbitMQ(message interface{}, queueName string) error {

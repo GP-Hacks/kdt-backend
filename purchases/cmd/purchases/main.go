@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/GP-Hack/kdt2024-commons/prettylogger"
+	"github.com/GP-Hacks/kdt2024-commons/prettylogger"
 	"github.com/GP-Hacks/kdt2024-purchases/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/streadway/amqp"

@@ -3,8 +3,8 @@ package storage
 import (
 	"context"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"log/slog"
 	"time"
 )
 
@@ -55,36 +55,163 @@ type ChoiceInfo struct {
 	Stats        map[string]int32
 }
 
-type PostgresStorage struct {
-	DB     *pgxpool.Pool
-	logger *slog.Logger
+type UserRate struct {
+	ID   int
+	Rate int
 }
 
-func NewPostgresStorage(storagePath string, logger *slog.Logger) (*PostgresStorage, error) {
+type UserChoice struct {
+	ID     int
+	Choice string
+}
+
+type UserPetition struct {
+	ID      int
+	Support string
+}
+
+type PostgresStorage struct {
+	db *pgxpool.Pool
+}
+
+func NewPostgresStorage(storagePath string) (*PostgresStorage, error) {
 	const op = "storage.postgresql.New"
 	dbpool, err := pgxpool.New(context.Background(), storagePath)
 	if err != nil {
-		return nil, fmt.Errorf("%s: failed to create DB pool: %w", op, err)
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	return &PostgresStorage{DB: dbpool, logger: logger}, nil
+	return &PostgresStorage{db: dbpool}, nil
 }
 
 func (s *PostgresStorage) Close() {
-	s.DB.Close()
-	s.logger.Info("Database connection closed")
+	s.db.Close()
+}
+
+func (s *PostgresStorage) GetCategories(ctx context.Context) ([]string, error) {
+	const op = "storage.postgresql.GetCategories"
+
+	rows, err := s.db.Query(ctx, "SELECT DISTINCT category FROM votes")
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	var categories []string
+	for rows.Next() {
+		var category string
+		if err := rows.Scan(&category); err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		categories = append(categories, category)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return categories, nil
 }
 
 func (s *PostgresStorage) GetVotes(ctx context.Context) ([]*Vote, error) {
 	const op = "storage.postgresql.GetVotes"
-	s.logger.Debug("Fetching votes from database")
 
 	query := `
 		SELECT id, category, name, description, organization, photo, end_time 
 		FROM votes
 	`
-	rows, err := s.DB.Query(ctx, query)
+	return s.fetchVotes(ctx, query)
+}
+
+func (s *PostgresStorage) GetVotesByCategory(ctx context.Context, category string) ([]*Vote, error) {
+	const op = "storage.postgresql.GetVotes"
+
+	query := `
+		SELECT id, category, name, description, organization, photo, end_time 
+		FROM votes WHERE category = $1
+	`
+	return s.fetchVotes(ctx, query, category)
+}
+
+func (s *PostgresStorage) GetUserRates(ctx context.Context, token string) ([]*UserRate, error) {
+	const op = "storage.postgresql.GetUserRates"
+
+	rows, err := s.db.Query(ctx, `SELECT vote_id, user_token, rate FROM rate_results WHERE user_token = $1`, token)
 	if err != nil {
-		s.logger.Error("Query failed", slog.String("operation", op), slog.String("error", err.Error()))
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+	var rates []*UserRate
+	for rows.Next() {
+		var rate UserRate
+		if err := rows.Scan(&rate.ID, nil, &rate.Rate); err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		rates = append(rates, &rate)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, pgx.ErrNoRows
+	}
+	return rates, nil
+}
+
+func (s *PostgresStorage) GetUserChoices(ctx context.Context, token string) ([]*UserChoice, error) {
+	const op = "storage.postgresql.GetUserRates"
+
+	rows, err := s.db.Query(ctx, `SELECT vote_id, user_token, choice FROM choices_results WHERE user_token = $1`, token)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+	var choices []*UserChoice
+	for rows.Next() {
+		var choice UserChoice
+		if err := rows.Scan(&choice.ID, nil, &choice.Choice); err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		choices = append(choices, &choice)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, pgx.ErrNoRows
+	}
+	return choices, nil
+}
+
+func (s *PostgresStorage) GetUserPetitions(ctx context.Context, token string) ([]*UserPetition, error) {
+	const op = "storage.postgresql.GetUserRates"
+
+	rows, err := s.db.Query(ctx, `SELECT vote_id, user_token, support FROM petition_results WHERE user_token = $1`, token)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+	var petitions []*UserPetition
+	for rows.Next() {
+		var petition UserPetition
+		if err := rows.Scan(&petition.ID, nil, &petition.Support); err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		petitions = append(petitions, &petition)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, pgx.ErrNoRows
+	}
+	return petitions, nil
+}
+
+func (s *PostgresStorage) fetchVotes(ctx context.Context, query string, args ...interface{}) ([]*Vote, error) {
+	const op = "storage.postgresql.Votes"
+
+	rows, err := s.db.Query(ctx, query, args...)
+	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	defer rows.Close()
@@ -93,14 +220,12 @@ func (s *PostgresStorage) GetVotes(ctx context.Context) ([]*Vote, error) {
 	for rows.Next() {
 		var vote Vote
 		if err := rows.Scan(&vote.ID, &vote.Category, &vote.Name, &vote.Description, &vote.Organization, &vote.Photo, &vote.EndTime); err != nil {
-			s.logger.Error("Failed to scan row", slog.String("operation", op), slog.String("error", err.Error()))
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 
 		if vote.Category == "choice" {
 			options, err := s.getOptions(ctx, vote.ID)
 			if err != nil {
-				s.logger.Error("Failed to get options", slog.String("operation", op), slog.String("vote_id", fmt.Sprintf("%d", vote.ID)), slog.String("error", err.Error()))
 				return nil, fmt.Errorf("%s: %w", op, err)
 			}
 			vote.Options = options
@@ -112,17 +237,14 @@ func (s *PostgresStorage) GetVotes(ctx context.Context) ([]*Vote, error) {
 	}
 
 	if err := rows.Err(); err != nil {
-		s.logger.Error("Error occurred while iterating rows", slog.String("operation", op), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	s.logger.Info("Fetched votes successfully", slog.Int("count", len(votes)))
 	return votes, nil
 }
 
 func (s *PostgresStorage) GetRateInfo(ctx context.Context, voteId int) (*RateInfo, error) {
 	const op = "storage.postgresql.GetRateInfo"
-	s.logger.Debug("Fetching rate info", slog.Int("vote_id", voteId))
 
 	query := `
 		SELECT id, category, name, description, organization, photo, end_time 
@@ -130,30 +252,26 @@ func (s *PostgresStorage) GetRateInfo(ctx context.Context, voteId int) (*RateInf
 		WHERE id = $1 AND category = 'rate'
 	`
 	var rateInfo RateInfo
-	err := s.DB.QueryRow(ctx, query, voteId).Scan(
+	err := s.db.QueryRow(ctx, query, voteId).Scan(
 		&rateInfo.ID, &rateInfo.Category, &rateInfo.Name, &rateInfo.Description,
 		&rateInfo.Organization, &rateInfo.Photo, &rateInfo.EndTime,
 	)
 	if err != nil {
-		s.logger.Error("Query failed", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	mid, err := s.calculateAverageRating(ctx, voteId)
 	if err != nil {
-		s.logger.Error("Failed to calculate average rating", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	rateInfo.Mid = mid
 	rateInfo.Options = []string{}
 
-	s.logger.Info("Fetched rate info successfully", slog.Int("vote_id", voteId), slog.Float64("mid", mid))
 	return &rateInfo, nil
 }
 
 func (s *PostgresStorage) GetPetitionInfo(ctx context.Context, voteId int) (*PetitionInfo, error) {
 	const op = "storage.postgresql.GetPetitionInfo"
-	s.logger.Debug("Fetching petition info", slog.Int("vote_id", voteId))
 
 	query := `
 		SELECT id, category, name, description, organization, photo, end_time 
@@ -161,30 +279,26 @@ func (s *PostgresStorage) GetPetitionInfo(ctx context.Context, voteId int) (*Pet
 		WHERE id = $1 AND category = 'petition'
 	`
 	var petitionInfo PetitionInfo
-	err := s.DB.QueryRow(ctx, query, voteId).Scan(
+	err := s.db.QueryRow(ctx, query, voteId).Scan(
 		&petitionInfo.ID, &petitionInfo.Category, &petitionInfo.Name, &petitionInfo.Description,
 		&petitionInfo.Organization, &petitionInfo.Photo, &petitionInfo.EndTime,
 	)
 	if err != nil {
-		s.logger.Error("Query failed", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	stats, err := s.calculatePetitionStats(ctx, voteId)
 	if err != nil {
-		s.logger.Error("Failed to calculate petition stats", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	petitionInfo.Stats = stats
 	petitionInfo.Options = []string{}
 
-	s.logger.Info("Fetched petition info successfully", slog.Int("vote_id", voteId), slog.Any("stats", stats))
 	return &petitionInfo, nil
 }
 
 func (s *PostgresStorage) GetChoiceInfo(ctx context.Context, voteId int) (*ChoiceInfo, error) {
 	const op = "storage.postgresql.GetChoiceInfo"
-	s.logger.Debug("Fetching choice info", slog.Int("vote_id", voteId))
 
 	query := `
 		SELECT id, category, name, description, organization, photo, end_time 
@@ -192,36 +306,31 @@ func (s *PostgresStorage) GetChoiceInfo(ctx context.Context, voteId int) (*Choic
 		WHERE id = $1 AND category = 'choice'
 	`
 	var choiceInfo ChoiceInfo
-	err := s.DB.QueryRow(ctx, query, voteId).Scan(
+	err := s.db.QueryRow(ctx, query, voteId).Scan(
 		&choiceInfo.ID, &choiceInfo.Category, &choiceInfo.Name, &choiceInfo.Description,
 		&choiceInfo.Organization, &choiceInfo.Photo, &choiceInfo.EndTime,
 	)
 	if err != nil {
-		s.logger.Error("Query failed", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	options, err := s.getOptions(ctx, voteId)
 	if err != nil {
-		s.logger.Error("Failed to get options", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	choiceInfo.Options = options
 
 	stats, err := s.calculateChoiceStats(ctx, voteId)
 	if err != nil {
-		s.logger.Error("Failed to calculate choice stats", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	choiceInfo.Stats = stats
 
-	s.logger.Info("Fetched choice info successfully", slog.Int("vote_id", voteId), slog.Any("options", options), slog.Any("stats", stats))
 	return &choiceInfo, nil
 }
 
 func (s *PostgresStorage) VoteRate(ctx context.Context, token string, voteId int, rating int) error {
 	const op = "storage.postgresql.VoteRate"
-	s.logger.Debug("Recording rate vote", slog.String("token", token), slog.Int("vote_id", voteId), slog.Int("rating", rating))
 
 	query := `
 		INSERT INTO rate_results (vote_id, user_token, rate)
@@ -229,18 +338,15 @@ func (s *PostgresStorage) VoteRate(ctx context.Context, token string, voteId int
 		ON CONFLICT (vote_id, user_token) 
 		DO UPDATE SET rate = EXCLUDED.rate
 	`
-	_, err := s.DB.Exec(ctx, query, voteId, token, rating)
+	_, err := s.db.Exec(ctx, query, voteId, token, rating)
 	if err != nil {
-		s.logger.Error("Failed to record rate vote", slog.String("operation", op), slog.String("error", err.Error()))
-		return fmt.Errorf("%s: failed to record vote: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
-	s.logger.Info("Rate vote recorded successfully", slog.String("token", token), slog.Int("vote_id", voteId), slog.Int("rating", rating))
 	return nil
 }
 
 func (s *PostgresStorage) VotePetition(ctx context.Context, token string, voteId int, support string) error {
 	const op = "storage.postgresql.VotePetition"
-	s.logger.Debug("Recording petition vote", slog.String("token", token), slog.Int("vote_id", voteId), slog.String("support", support))
 
 	query := `
 		INSERT INTO petition_results (vote_id, user_token, support)
@@ -248,18 +354,15 @@ func (s *PostgresStorage) VotePetition(ctx context.Context, token string, voteId
 		ON CONFLICT (vote_id, user_token) 
 		DO UPDATE SET support = EXCLUDED.support
 	`
-	_, err := s.DB.Exec(ctx, query, voteId, token, support)
+	_, err := s.db.Exec(ctx, query, voteId, token, support)
 	if err != nil {
-		s.logger.Error("Failed to record petition vote", slog.String("operation", op), slog.String("error", err.Error()))
-		return fmt.Errorf("%s: failed to record vote: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
-	s.logger.Info("Petition vote recorded successfully", slog.String("token", token), slog.Int("vote_id", voteId), slog.String("support", support))
 	return nil
 }
 
 func (s *PostgresStorage) VoteChoice(ctx context.Context, token string, voteId int, choice string) error {
 	const op = "storage.postgresql.VoteChoice"
-	s.logger.Debug("Recording choice vote", slog.String("token", token), slog.Int("vote_id", voteId), slog.String("choice", choice))
 
 	query := `
 		INSERT INTO choices_results (vote_id, user_token, choice)
@@ -267,27 +370,23 @@ func (s *PostgresStorage) VoteChoice(ctx context.Context, token string, voteId i
 		ON CONFLICT (vote_id, user_token) 
 		DO UPDATE SET choice = EXCLUDED.choice
 	`
-	_, err := s.DB.Exec(ctx, query, voteId, token, choice)
+	_, err := s.db.Exec(ctx, query, voteId, token, choice)
 	if err != nil {
-		s.logger.Error("Failed to record choice vote", slog.String("operation", op), slog.String("error", err.Error()))
-		return fmt.Errorf("%s: failed to record vote: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
-	s.logger.Info("Choice vote recorded successfully", slog.String("token", token), slog.Int("vote_id", voteId), slog.String("choice", choice))
 	return nil
 }
 
 func (s *PostgresStorage) getOptions(ctx context.Context, voteId int) ([]string, error) {
 	const op = "storage.postgresql.getOptions"
-	s.logger.Debug("Fetching options", slog.Int("vote_id", voteId))
 
 	query := `
 		SELECT option 
 		FROM options 
 		WHERE vote_id = $1
 	`
-	rows, err := s.DB.Query(ctx, query, voteId)
+	rows, err := s.db.Query(ctx, query, voteId)
 	if err != nil {
-		s.logger.Error("Query failed", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	defer rows.Close()
@@ -296,24 +395,20 @@ func (s *PostgresStorage) getOptions(ctx context.Context, voteId int) ([]string,
 	for rows.Next() {
 		var option string
 		if err := rows.Scan(&option); err != nil {
-			s.logger.Error("Failed to scan row", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 		options = append(options, option)
 	}
 
 	if err := rows.Err(); err != nil {
-		s.logger.Error("Error occurred while iterating rows", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	s.logger.Info("Fetched options successfully", slog.Int("vote_id", voteId), slog.Any("options", options))
 	return options, nil
 }
 
 func (s *PostgresStorage) calculateAverageRating(ctx context.Context, voteId int) (float64, error) {
 	const op = "storage.postgresql.calculateAverageRating"
-	s.logger.Debug("Calculating average rating", slog.Int("vote_id", voteId))
 
 	query := `
 		SELECT COALESCE(AVG(rate), 0) 
@@ -321,19 +416,16 @@ func (s *PostgresStorage) calculateAverageRating(ctx context.Context, voteId int
 		WHERE vote_id = $1
 	`
 	var mid float64
-	err := s.DB.QueryRow(ctx, query, voteId).Scan(&mid)
+	err := s.db.QueryRow(ctx, query, voteId).Scan(&mid)
 	if err != nil {
-		s.logger.Error("Query failed", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
-	s.logger.Info("Calculated average rating successfully", slog.Int("vote_id", voteId), slog.Float64("mid", mid))
 	return mid, nil
 }
 
 func (s *PostgresStorage) calculatePetitionStats(ctx context.Context, voteId int) (map[string]int32, error) {
 	const op = "storage.postgresql.calculatePetitionStats"
-	s.logger.Debug("Calculating petition stats", slog.Int("vote_id", voteId))
 
 	query := `
 		SELECT support, COUNT(*) 
@@ -341,9 +433,8 @@ func (s *PostgresStorage) calculatePetitionStats(ctx context.Context, voteId int
 		WHERE vote_id = $1 
 		GROUP BY support
 	`
-	rows, err := s.DB.Query(ctx, query, voteId)
+	rows, err := s.db.Query(ctx, query, voteId)
 	if err != nil {
-		s.logger.Error("Query failed", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	defer rows.Close()
@@ -353,24 +444,20 @@ func (s *PostgresStorage) calculatePetitionStats(ctx context.Context, voteId int
 		var support string
 		var count int
 		if err := rows.Scan(&support, &count); err != nil {
-			s.logger.Error("Failed to scan row", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 		stats[support] = int32(count)
 	}
 
 	if err := rows.Err(); err != nil {
-		s.logger.Error("Error occurred while iterating rows", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	s.logger.Info("Calculated petition stats successfully", slog.Int("vote_id", voteId), slog.Any("stats", stats))
 	return stats, nil
 }
 
 func (s *PostgresStorage) calculateChoiceStats(ctx context.Context, voteId int) (map[string]int32, error) {
 	const op = "storage.postgresql.calculateChoiceStats"
-	s.logger.Debug("Calculating choice stats", slog.Int("vote_id", voteId))
 
 	query := `
 		SELECT choice, COUNT(*) 
@@ -378,9 +465,8 @@ func (s *PostgresStorage) calculateChoiceStats(ctx context.Context, voteId int) 
 		WHERE vote_id = $1 
 		GROUP BY choice
 	`
-	rows, err := s.DB.Query(ctx, query, voteId)
+	rows, err := s.db.Query(ctx, query, voteId)
 	if err != nil {
-		s.logger.Error("Query failed", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	defer rows.Close()
@@ -390,34 +476,28 @@ func (s *PostgresStorage) calculateChoiceStats(ctx context.Context, voteId int) 
 		var choice string
 		var count int
 		if err := rows.Scan(&choice, &count); err != nil {
-			s.logger.Error("Failed to scan row", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 		stats[choice] = int32(count)
 	}
 
 	if err := rows.Err(); err != nil {
-		s.logger.Error("Error occurred while iterating rows", slog.String("operation", op), slog.Int("vote_id", voteId), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	s.logger.Info("Calculated choice stats successfully", slog.Int("vote_id", voteId), slog.Any("stats", stats))
 	return stats, nil
 }
 
 func (s *PostgresStorage) FetchAndStoreData(ctx context.Context) error {
 	const op = "storage.postgresql.FetchAndStoreData"
-	s.logger.Debug("Fetching and storing initial data")
 
 	var count int
-	err := s.DB.QueryRow(ctx, "SELECT COUNT(*) FROM votes").Scan(&count)
+	err := s.db.QueryRow(ctx, "SELECT COUNT(*) FROM votes").Scan(&count)
 	if err != nil {
-		s.logger.Error("Failed to check existing data", slog.String("operation", op), slog.String("error", err.Error()))
-		return fmt.Errorf("failed to check existing data: %w", err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 
 	if count > 0 {
-		s.logger.Info("Data already exists in the database. Skipping fetch and store.")
 		return nil
 	}
 
@@ -430,10 +510,9 @@ func (s *PostgresStorage) FetchAndStoreData(ctx context.Context) error {
 		{6, "rate", "Отзыв о культурном мероприятии", "Поделитесь своим впечатлением о культурном мероприятии, которое вы посетили. Ваши отзывы помогут организовать лучшие события в будущем.", "Управление культуры Республики Татарстан", time.Now().Add(194 * time.Hour), "https://ucare.timepad.ru/a7c550ce-b1a7-4ee2-ab8f-81759077108c/-/preview/600x600/", []string{}},
 	}
 
-	tx, err := s.DB.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		s.logger.Error("Failed to begin transaction", slog.String("operation", op), slog.String("error", err.Error()))
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 	defer tx.Rollback(ctx)
 
@@ -445,23 +524,87 @@ func (s *PostgresStorage) FetchAndStoreData(ctx context.Context) error {
             RETURNING id`,
 			vote.Category, vote.Name, vote.Description, vote.Organization, vote.Photo, vote.EndTime).Scan(&voteID)
 		if err != nil {
-			s.logger.Error("Failed to insert vote", slog.String("operation", op), slog.String("error", err.Error()))
-			return fmt.Errorf("failed to insert vote: %w", err)
+			return fmt.Errorf("%s: %w", op, err)
 		}
 
 		for _, option := range vote.Options {
 			_, err = tx.Exec(ctx, `INSERT INTO options (vote_id, option) VALUES ($1, $2)`, voteID, option)
 			if err != nil {
-				s.logger.Error("Failed to insert option", slog.String("operation", op), slog.String("error", err.Error()))
-				return fmt.Errorf("failed to insert option: %w", err)
+				return fmt.Errorf("%s: %w", op, err)
 			}
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		s.logger.Error("Failed to commit transaction", slog.String("operation", op), slog.String("error", err.Error()))
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
-	s.logger.Info("Data fetched and stored successfully")
+	return nil
+}
+
+func (s *PostgresStorage) CreateTables(ctx context.Context) error {
+	const op = "storage.postgresql.CreateTables"
+	tables := []struct {
+		name  string
+		query string
+	}{
+		{
+			name: "votes",
+			query: `
+				CREATE TABLE IF NOT EXISTS votes (
+					id SERIAL PRIMARY KEY,
+					category VARCHAR(255),
+					name TEXT,
+					description TEXT,
+					organization TEXT,
+					photo TEXT,
+					end_time TIMESTAMP
+				)`,
+		},
+		{
+			name: "options",
+			query: `
+				CREATE TABLE IF NOT EXISTS options (
+					vote_id INT REFERENCES votes(id) ON DELETE CASCADE,
+					option VARCHAR(255)
+				)`,
+		},
+		{
+			name: "rate_results",
+			query: `
+				CREATE TABLE IF NOT EXISTS rate_results (
+					vote_id INT REFERENCES votes(id) ON DELETE CASCADE,
+					user_token TEXT,
+					rate INT,
+					UNIQUE (vote_id, user_token)
+				)`,
+		},
+		{
+			name: "petition_results",
+			query: `
+				CREATE TABLE IF NOT EXISTS petition_results (
+					vote_id INT REFERENCES votes(id) ON DELETE CASCADE,
+					user_token TEXT,
+					support VARCHAR(50),
+					UNIQUE (vote_id, user_token)
+				)`,
+		},
+		{
+			name: "choices_results",
+			query: `
+				CREATE TABLE IF NOT EXISTS choices_results (
+					vote_id INT REFERENCES votes(id) ON DELETE CASCADE,
+					user_token TEXT,
+					choice TEXT,
+					UNIQUE (vote_id, user_token)
+				)`,
+		},
+	}
+
+	for _, table := range tables {
+		_, err := s.db.Exec(ctx, table.query)
+		if err != nil {
+			return fmt.Errorf("%s: %w", op, err)
+		}
+	}
 	return nil
 }

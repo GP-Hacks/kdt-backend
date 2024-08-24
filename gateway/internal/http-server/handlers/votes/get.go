@@ -1,11 +1,14 @@
 package votes
 
 import (
-	"github.com/GP-Hack/kdt2024-commons/api/proto"
-	"github.com/GP-Hack/kdt2024-commons/json"
+	"github.com/GP-Hacks/kdt2024-commons/api/proto"
+	"github.com/GP-Hacks/kdt2024-commons/json"
 	"github.com/go-chi/chi/v5/middleware"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -72,7 +75,15 @@ func NewGetVotesHandler(log *slog.Logger, votesClient proto.VotesServiceClient) 
 		default:
 		}
 
-		resp, err := votesClient.GetVotes(ctx, &proto.GetVotesRequest{})
+		category := r.URL.Query().Get("category")
+
+		if category == "" {
+			logger.Warn("Request missing category")
+			json.WriteError(w, http.StatusBadRequest, "Category field is required")
+			return
+		}
+
+		resp, err := votesClient.GetVotes(ctx, &proto.GetVotesRequest{Category: category})
 		if err != nil {
 			logger.Error("Failed to retrieve votes", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusInternalServerError, "Failed to retrieve votes")
@@ -108,34 +119,44 @@ func NewGetVoteInfoHandler(log *slog.Logger, votesClient proto.VotesServiceClien
 		default:
 		}
 
-		var request proto.GetVoteInfoRequest
-		if err := json.ReadJSON(r, &request); err != nil {
-			logger.Error("Failed to parse JSON input", slog.String("error", err.Error()))
-			json.WriteError(w, http.StatusBadRequest, "Invalid JSON input")
+		reqVoteId := r.URL.Query().Get("vote_id")
+
+		if reqVoteId == "" {
+			logger.Warn("Request missing vote_id")
+			json.WriteError(w, http.StatusBadRequest, "vote_id field is required")
 			return
 		}
 
-		voteId := request.GetVoteId()
+		voteId, err := strconv.Atoi(reqVoteId)
+
+		if err != nil {
+			logger.Warn("Request bad vote_id")
+			json.WriteError(w, http.StatusBadRequest, "vote_id field is NaN")
+			return
+		}
+
 		if voteId == 0 {
-			logger.Warn("Invalid vote_id field", slog.Any("request_payload", request))
+			logger.Warn("Invalid vote_id field")
 			json.WriteError(w, http.StatusBadRequest, "Invalid vote_id field")
 			return
 		}
 
-		votesResp, err := votesClient.GetVotes(ctx, &proto.GetVotesRequest{})
+		votesResp, err := votesClient.GetVotes(ctx, &proto.GetVotesRequest{Category: "all"})
 		if err != nil {
 			logger.Error("Failed to retrieve votes", slog.String("error", err.Error()))
 			json.WriteError(w, http.StatusInternalServerError, "Failed to retrieve votes")
 			return
 		}
-
 		var voteResp *proto.Vote
 		for _, vote := range votesResp.GetResponse() {
-			if vote.Id == voteId {
+			if vote.Id == int32(voteId) {
 				voteResp = vote
 				break
 			}
 		}
+
+		token := r.Header.Get("Authorization")
+
 		if voteResp == nil {
 			logger.Warn("Vote not found", slog.Int("vote_id", int(voteId)))
 			json.WriteError(w, http.StatusNotFound, "Vote not found")
@@ -145,7 +166,7 @@ func NewGetVoteInfoHandler(log *slog.Logger, votesClient proto.VotesServiceClien
 		var detailedResp interface{}
 		switch voteResp.Category {
 		case "choice":
-			choiceResp, err := votesClient.GetChoiceInfo(ctx, &proto.GetVoteInfoRequest{VoteId: voteId})
+			choiceResp, err := votesClient.GetChoiceInfo(ctx, &proto.GetVoteInfoRequest{VoteId: int32(voteId), Token: token})
 			if err != nil {
 				logger.Error("Failed to retrieve choice info", slog.String("error", err.Error()))
 				json.WriteError(w, http.StatusInternalServerError, "Failed to retrieve choice info")
@@ -153,7 +174,7 @@ func NewGetVoteInfoHandler(log *slog.Logger, votesClient proto.VotesServiceClien
 			}
 			detailedResp = withDefaultChoiceInfo(choiceResp)
 		case "petition":
-			petitionResp, err := votesClient.GetPetitionInfo(ctx, &proto.GetVoteInfoRequest{VoteId: voteId})
+			petitionResp, err := votesClient.GetPetitionInfo(ctx, &proto.GetVoteInfoRequest{VoteId: int32(voteId), Token: token})
 			if err != nil {
 				logger.Error("Failed to retrieve petition info", slog.String("error", err.Error()))
 				json.WriteError(w, http.StatusInternalServerError, "Failed to retrieve petition info")
@@ -161,7 +182,7 @@ func NewGetVoteInfoHandler(log *slog.Logger, votesClient proto.VotesServiceClien
 			}
 			detailedResp = withDefaultPetitionInfo(petitionResp)
 		case "rate":
-			rateResp, err := votesClient.GetRateInfo(ctx, &proto.GetVoteInfoRequest{VoteId: voteId})
+			rateResp, err := votesClient.GetRateInfo(ctx, &proto.GetVoteInfoRequest{VoteId: int32(voteId), Token: token})
 			if err != nil {
 				logger.Error("Failed to retrieve rate info", slog.String("error", err.Error()))
 				json.WriteError(w, http.StatusInternalServerError, "Failed to retrieve rate info")
@@ -176,5 +197,54 @@ func NewGetVoteInfoHandler(log *slog.Logger, votesClient proto.VotesServiceClien
 
 		json.WriteJSON(w, http.StatusOK, detailedResp)
 		logger.Debug("Vote info retrieved successfully", slog.Any("response", detailedResp))
+	}
+}
+
+func NewGetCategoriesHandler(log *slog.Logger, votesClient proto.VotesServiceClient) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		const op = "handler.votes.getcategories.New"
+		ctx := r.Context()
+		reqID := middleware.GetReqID(ctx)
+		logger := log.With(
+			slog.String("operation", op),
+			slog.String("request_id", reqID),
+			slog.String("client_ip", r.RemoteAddr),
+			slog.String("method", r.Method),
+			slog.String("url", r.URL.String()),
+		)
+
+		logger.Info("Processing request to get categories")
+
+		select {
+		case <-ctx.Done():
+			logger.Warn("Request was cancelled by the client", slog.String("reason", ctx.Err().Error()))
+			http.Error(w, "Request was cancelled", http.StatusRequestTimeout)
+			return
+		default:
+		}
+
+		req := &proto.GetCategoriesRequest{}
+		logger.Debug("Sending request to get categories", slog.Any("request", req))
+
+		resp, err := votesClient.GetCategories(ctx, req)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				logger.Warn("No categories found in response", slog.String("error", err.Error()))
+				json.WriteError(w, http.StatusNotFound, "No categories found")
+				return
+			}
+			logger.Error("Failed to retrieve categories from gRPC server", slog.String("error", err.Error()))
+			json.WriteError(w, http.StatusInternalServerError, "Could not retrieve categories")
+			return
+		}
+
+		response := struct {
+			Response []string `json:"response"`
+		}{
+			Response: resp.GetCategories(),
+		}
+
+		logger.Debug("Categories successfully retrieved", slog.Any("response", response))
+		json.WriteJSON(w, http.StatusOK, response)
 	}
 }

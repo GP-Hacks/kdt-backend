@@ -1,8 +1,8 @@
 package charity
 
 import (
-	"github.com/GP-Hack/kdt2024-commons/api/proto"
-	"github.com/GP-Hack/kdt2024-commons/json"
+	"github.com/GP-Hacks/kdt2024-commons/api/proto"
+	"github.com/GP-Hacks/kdt2024-commons/json"
 	"github.com/go-chi/chi/v5/middleware"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -70,18 +70,15 @@ func NewGetCollectionsHandler(log *slog.Logger, charityClient proto.CharityServi
 		default:
 		}
 
-		var request proto.GetCollectionsRequest
-		if err := json.ReadJSON(r, &request); err != nil {
-			logger.Error("Failed to parse JSON input", slog.String("error", err.Error()))
-			json.WriteError(w, http.StatusBadRequest, "Invalid JSON input")
+		category := r.URL.Query().Get("category")
+
+		if category == "" {
+			logger.Warn("Invalid category parameter")
+			json.WriteError(w, http.StatusBadRequest, "Invalid category parameter")
 			return
 		}
 
-		if request.GetCategory() == "" {
-			logger.Warn("Request missing category", slog.String("category", request.GetCategory()))
-			json.WriteError(w, http.StatusBadRequest, "Category field is required")
-			return
-		}
+		request := proto.GetCollectionsRequest{Category: category}
 
 		logger.Info("Fetching collections for category", slog.String("category", request.GetCategory()))
 

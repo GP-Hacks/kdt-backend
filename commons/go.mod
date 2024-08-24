@@ -1,4 +1,4 @@
-module github.com/GP-Hack/kdt2024-commons
+module github.com/GP-Hacks/kdt2024-commons
 
 go 1.23
 
