@@ -1,16 +1,6 @@
 package main
 
 import (
-	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/charity"
-	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/chat"
-	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/tokens"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"log/slog"
-	"net/http"
-	"os"
-	"runtime"
-
 	"github.com/GP-Hacks/kdt2024-commons/api/proto"
 	"github.com/GP-Hacks/kdt2024-commons/prettylogger"
 	"github.com/GP-Hacks/kdt2024-gateway/config"
@@ -18,12 +8,22 @@ import (
 	chatclient "github.com/GP-Hacks/kdt2024-gateway/internal/grpc-clients/chat"
 	placesclient "github.com/GP-Hacks/kdt2024-gateway/internal/grpc-clients/places"
 	votesclient "github.com/GP-Hacks/kdt2024-gateway/internal/grpc-clients/votes"
+	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/charity"
+	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/chat"
 	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/places"
+	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/tokens"
 	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/votes"
 	"github.com/GP-Hacks/kdt2024-gateway/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
 	httpSwagger "github.com/swaggo/http-swagger"
+	"log/slog"
+	"net/http"
+	"os"
 )
 
 var (
@@ -41,13 +41,6 @@ var (
 			Buckets: prometheus.DefBuckets,
 		},
 		[]string{"method", "endpoint"},
-	)
-	httpRequestErrors = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "http_request_errors_total",
-			Help: "Total number of HTTP request errors",
-		},
-		[]string{"method", "endpoint", "status_code"},
 	)
 
 	cpuUsage = prometheus.NewGaugeFunc(
@@ -75,7 +68,6 @@ func main() {
 
 	prometheus.MustRegister(httpRequestsTotal)
 	prometheus.MustRegister(httpRequestDuration)
-	prometheus.MustRegister(httpRequestErrors)
 	prometheus.MustRegister(cpuUsage)
 	prometheus.MustRegister(memoryUsage)
 
@@ -232,19 +224,37 @@ func startServer(cfg *config.Config, router *chi.Mux, log *slog.Logger) {
 
 func prometheusMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		excludedPaths := map[string]bool{
+			"/api/docs/*": true,
+			"/metrics":    true,
+		}
+
+		if excludedPaths[r.URL.Path] {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		timer := prometheus.NewTimer(httpRequestDuration.WithLabelValues(r.Method, r.URL.Path))
 		defer timer.ObserveDuration()
-		next.ServeHTTP(w, r)
+
 		httpRequestsTotal.WithLabelValues(r.Method, r.URL.Path).Inc()
+
+		next.ServeHTTP(w, r)
 	})
 }
 
 func getCPUUsage() float64 {
-	return float64(runtime.NumCPU())
+	percentages, err := cpu.Percent(0, false)
+	if err != nil {
+		return 0.0
+	}
+	return percentages[0] * 100
 }
 
 func getMemoryUsage() float64 {
-	var memStats runtime.MemStats
-	runtime.ReadMemStats(&memStats)
-	return float64(memStats.Alloc)
+	vmStat, err := mem.VirtualMemory()
+	if err != nil {
+		return 0.0
+	}
+	return vmStat.UsedPercent
 }
