@@ -4,9 +4,12 @@ import (
 	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/charity"
 	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/chat"
 	"github.com/GP-Hacks/kdt2024-gateway/internal/http-server/handlers/tokens"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime"
 
 	"github.com/GP-Hacks/kdt2024-commons/api/proto"
 	"github.com/GP-Hacks/kdt2024-commons/prettylogger"
@@ -23,12 +26,60 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
+var (
+	httpRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "Total number of HTTP requests",
+		},
+		[]string{"method", "endpoint"},
+	)
+	httpRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "http_request_duration_seconds",
+			Help:    "Histogram of response time for handler",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"method", "endpoint"},
+	)
+	httpRequestErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_request_errors_total",
+			Help: "Total number of HTTP request errors",
+		},
+		[]string{"method", "endpoint", "status_code"},
+	)
+
+	cpuUsage = prometheus.NewGaugeFunc(
+		prometheus.GaugeOpts{
+			Name: "system_cpu_usage",
+			Help: "Current CPU usage as a percentage",
+		},
+		getCPUUsage,
+	)
+	memoryUsage = prometheus.NewGaugeFunc(
+		prometheus.GaugeOpts{
+			Name: "system_memory_usage_bytes",
+			Help: "Current memory usage in bytes",
+		},
+		getMemoryUsage,
+	)
+)
+
 func main() {
 	cfg := config.MustLoad()
 	log := prettylogger.SetupLogger(cfg.Env)
 
 	log.Info("Configuration loaded", slog.String("environment", cfg.Env))
 	log.Info("Logger initialized", slog.String("level", cfg.Env))
+
+	prometheus.MustRegister(httpRequestsTotal)
+	prometheus.MustRegister(httpRequestDuration)
+	prometheus.MustRegister(httpRequestErrors)
+	prometheus.MustRegister(cpuUsage)
+	prometheus.MustRegister(memoryUsage)
+
+	log.Info("Prometheus metrics registered")
 
 	if err := connectToMongoDB(cfg, log); err != nil {
 		log.Error("Failed to connect to MongoDB", slog.String("error", err.Error()))
@@ -119,6 +170,7 @@ func setupRouter(cfg *config.Config, log *slog.Logger, chatClient proto.ChatServ
 	router.Use(middleware.RealIP)
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
+	router.Use(prometheusMiddleware)
 
 	router.Get("/swagger", func(w http.ResponseWriter, r *http.Request) {
 		yamlFile, err := os.ReadFile("/root/swagger.yaml")
@@ -131,7 +183,7 @@ func setupRouter(cfg *config.Config, log *slog.Logger, chatClient proto.ChatServ
 	})
 
 	router.Get("/api/docs/*", httpSwagger.Handler(
-		httpSwagger.URL("http://localhost:8086/swagger"),
+		httpSwagger.URL("http://95.174.92.20:8086/swagger"),
 	),
 	)
 
@@ -154,6 +206,8 @@ func setupRouter(cfg *config.Config, log *slog.Logger, chatClient proto.ChatServ
 	router.Post("/api/votes/petition", votes.NewVotePetitionHandler(log, votesClient))
 	router.Post("/api/votes/choice", votes.NewVoteChoiceHandler(log, votesClient))
 
+	router.Handle("/metrics", promhttp.Handler())
+
 	log.Info("Router successfully created with defined routes")
 	return router
 }
@@ -174,4 +228,23 @@ func startServer(cfg *config.Config, router *chi.Mux, log *slog.Logger) {
 	}
 
 	log.Info("Server shutdown gracefully", slog.String("address", cfg.LocalAddress))
+}
+
+func prometheusMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		timer := prometheus.NewTimer(httpRequestDuration.WithLabelValues(r.Method, r.URL.Path))
+		defer timer.ObserveDuration()
+		next.ServeHTTP(w, r)
+		httpRequestsTotal.WithLabelValues(r.Method, r.URL.Path).Inc()
+	})
+}
+
+func getCPUUsage() float64 {
+	return float64(runtime.NumCPU())
+}
+
+func getMemoryUsage() float64 {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	return float64(memStats.Alloc)
 }

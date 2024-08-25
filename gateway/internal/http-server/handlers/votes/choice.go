@@ -31,8 +31,8 @@ type ChoiceInfoWithDefault struct {
 
 func withDefaultChoiceInfo(resp *proto.GetChoiceInfoResponse) *GetChoiceInfoResponseWithDefault {
 	stats := make(map[string]int)
-	for k, v := range resp.GetResponse().Stats {
-		stats[k] = int(v)
+	for _, opt := range resp.GetResponse().Options {
+		stats[opt] = int(resp.GetResponse().Stats[opt])
 	}
 
 	return &GetChoiceInfoResponseWithDefault{

@@ -159,7 +159,7 @@ func (h *GRPCHandler) GetPlaces(ctx context.Context, request *proto.GetPlacesReq
 			return nil, err
 		}
 
-		times := []string{place.Time, roundMinutes(time.Now()).Format("15:04")}
+		times := []string{place.Time, roundMinutes(time.Now().Add(3 * time.Hour)).Format("15:04")}
 		sort.Strings(times)
 
 		responsePlaces = append(responsePlaces, &proto.Place{
