@@ -1,6 +1,6 @@
 package models
 
 type Notification struct {
-	header  string
-	content string
+	Header  string
+	Content string
 }
