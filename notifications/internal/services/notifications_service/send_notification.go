@@ -6,7 +6,7 @@ import (
 	"github.com/GP-Hacks/kdt2024-notifications/internal/models"
 )
 
-func (s *NotificationsService) SendNotification(ctx context.Context, notification *models.Notification, userIds ...string) {
+func (s *NotificationsService) SendNotifications(ctx context.Context, notification *models.Notification, userIds ...string) {
 	for _, userId := range userIds {
 		go func(userId string) {
 			tokens, err := s.tokensRepository.GetTokensByUserId(ctx, userId)
@@ -14,7 +14,7 @@ func (s *NotificationsService) SendNotification(ctx context.Context, notificatio
 				// TODO: добавить логирование или сбор метрик надо
 			}
 
-			s.noificationsRepository.SendNotification(ctx, notification, tokens...)
+			s.noificationsRepository.SendNotifications(ctx, notification, tokens...)
 		}(userId)
 	}
 }

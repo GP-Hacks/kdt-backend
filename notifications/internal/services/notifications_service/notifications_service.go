@@ -13,7 +13,7 @@ type (
 	}
 
 	INotificationsRepository interface {
-		SendNotification(ctx context.Context, notification *models.Notification, token ...string) error
+		SendNotifications(ctx context.Context, notification *models.Notification, token ...string) error
 	}
 
 	NotificationsService struct {
