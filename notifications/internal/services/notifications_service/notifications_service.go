@@ -21,3 +21,10 @@ type (
 		noificationsRepository INotificationsRepository
 	}
 )
+
+func NewNotificationsService(tokensRepository ITokensRepository, notificationsRepository INotificationsRepository) *NotificationsService {
+	return &NotificationsService{
+		tokensRepository:       tokensRepository,
+		noificationsRepository: notificationsRepository,
+	}
+}
