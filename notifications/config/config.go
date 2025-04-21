@@ -20,8 +20,10 @@ type Config struct {
 	FirebaseClientX509CertUrl string
 }
 
+var Cfg Config
+
 func MustLoad() *Config {
-	return &Config{
+	Cfg = Config{
 		Env:                       "local",
 		Address:                   os.Getenv("SERVICE_ADDRESS"),
 		RabbitMQAddress:           os.Getenv("RABBITMQ_ADDRESS"),
@@ -36,4 +38,6 @@ func MustLoad() *Config {
 		FirebaseClientId:          os.Getenv("FIREBASE_CLIENT_ID"),
 		FirebaseClientX509CertUrl: os.Getenv("FIREBASE_CLIENT_X509_CERT_URL"),
 	}
+
+	return &Cfg
 }
